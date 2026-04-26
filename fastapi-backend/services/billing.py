@@ -30,6 +30,13 @@ async def get_or_create_quota(db: AsyncSession, user: User) -> Quota:
         await db.commit()
         await db.refresh(quota)
 
+    plan_quota = PLAN_QUOTAS.get(user.plan, FREE_MONTHLY_QUOTA)
+    if quota.total_quota != plan_quota:
+        quota.total_quota = plan_quota
+        quota.used_quota = min(quota.used_quota, plan_quota)
+        await db.commit()
+        await db.refresh(quota)
+
     now = _utcnow()
     period_start = quota.period_start
     if period_start and period_start.tzinfo is None:

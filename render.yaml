@@ -28,6 +28,6 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "10080"
       - key: FREE_MONTHLY_QUOTA
-        value: "20"
+        value: "10"
       - key: PRO_MONTHLY_QUOTA
         value: "500"

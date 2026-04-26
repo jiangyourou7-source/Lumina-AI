@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ImagePlus, LayoutDashboard, LogOut, UserRound } from "lucide-react";
+import { ArrowRight, BadgePercent, Check, ImagePlus, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { getUserProfile, isAuthenticated, logout } from "@/lib/openai-proxy";
 
 interface ProfileState {
@@ -21,11 +21,27 @@ interface ProfileState {
   };
 }
 
+const TOP_UP_OPTIONS = [
+  { id: "starter", price: "¥1", credits: "5 张", unit: "¥0.20/张", note: "体验充值" },
+  { id: "standard", price: "¥10", credits: "50 张", unit: "¥0.20/张", note: "日常使用" },
+  { id: "business", price: "¥100", credits: "500 张", unit: "¥0.20/张", note: "团队常用" },
+  { id: "growth", price: "¥500", credits: "2800 张", unit: "约 ¥0.18/张", note: "量大优惠" },
+  { id: "scale", price: "¥1000", credits: "6000 张", unit: "约 ¥0.17/张", note: "深度优惠" },
+];
+
+function getPlanLabel(plan: string) {
+  if (plan === "free") return "免费套餐";
+  if (plan === "pro") return "专业套餐";
+  if (plan === "enterprise") return "企业套餐";
+  return plan;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedTopUp, setSelectedTopUp] = useState(TOP_UP_OPTIONS[1].id);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -48,6 +64,8 @@ export default function SettingsPage() {
     logout();
     router.push("/login");
   };
+
+  const planLabel = profile ? getPlanLabel(profile.user.plan || profile.quota.plan || "free") : "";
 
   return (
     <main className="min-h-[calc(100vh-64px)] bg-[#f8fafc] px-6 py-10">
@@ -81,7 +99,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <InfoTile label="当前套餐" value={profile.user.plan || profile.quota.plan || "free"} />
+                <InfoTile label="当前套餐" value={planLabel} />
                 <InfoTile label="剩余额度" value={`${profile.quota.remaining}/${profile.quota.total}`} />
               </div>
 
@@ -92,6 +110,55 @@ export default function SettingsPage() {
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-[#e2e8f0]">
                   <div className="h-full rounded-full bg-brand-primary" style={{ width: `${quotaPercent}%` }} />
+                </div>
+              </div>
+
+              <div className="mt-6 border-t border-black/5 pt-6">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#eef5ff] px-3 py-1 text-[12px] font-medium text-brand-primary">
+                      <BadgePercent className="h-3.5 w-3.5" />
+                      充值模式
+                    </div>
+                    <h3 className="text-[18px] font-semibold text-[#0f172a]">按张充值，基础价 2 角一张</h3>
+                    <p className="mt-1 text-[13px] text-text-secondary">
+                      支付通道接入后可直接购买额度；当前先展示档位和成本结构。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {TOP_UP_OPTIONS.map((option) => {
+                    const selected = selectedTopUp === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedTopUp(option.id)}
+                        className={`rounded-[14px] border p-4 text-left transition ${
+                          selected
+                            ? "border-brand-primary bg-[#f0f7ff] shadow-sm"
+                            : "border-black/5 bg-[#f8fafc] hover:border-brand-primary/30 hover:bg-white"
+                        }`}
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[22px] font-semibold text-[#0f172a]">{option.price}</p>
+                            <p className="text-[13px] text-text-secondary">{option.note}</p>
+                          </div>
+                          {selected ? (
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-primary text-white">
+                              <Check className="h-3.5 w-3.5" />
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-end justify-between">
+                          <span className="text-[18px] font-semibold text-[#0f172a]">{option.credits}</span>
+                          <span className="text-[12px] text-text-secondary">{option.unit}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </section>

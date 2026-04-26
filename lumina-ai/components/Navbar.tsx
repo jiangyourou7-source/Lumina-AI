@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Menu, X, Sparkles } from "lucide-react";
+import { Menu, X, Sparkles, UserRound } from "lucide-react";
 import { isAuthenticated, logout } from "@/lib/openai-proxy";
 
 const navLinks = [
@@ -65,19 +65,21 @@ export function Navbar() {
           })}
           {authed ? (
             <>
-              <Link
-                href="/studio"
-                prefetch={false}
-                className="bg-brand-primary text-white px-5 py-2 rounded-apple text-[15px] font-medium hover:scale-[1.02] hover:shadow-card transition-all duration-200 no-underline"
-              >
-                进入工作台
-              </Link>
               <button
                 onClick={handleLogout}
                 className="text-[15px] font-medium text-text-secondary transition-colors hover:text-text-primary"
               >
                 退出
               </button>
+              <Link
+                href="/settings"
+                prefetch={false}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef5ff] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
+                aria-label="账号设置"
+                title="账号设置"
+              >
+                <UserRound className="h-5 w-5" />
+              </Link>
             </>
           ) : (
             <>
@@ -131,12 +133,12 @@ export function Navbar() {
           {authed ? (
             <>
               <Link
-                href="/studio"
+                href="/settings"
                 prefetch={false}
-                className="block w-full text-center bg-brand-primary text-white py-3 rounded-apple text-[15px] font-medium no-underline"
+                className="block w-full text-center bg-[#eef5ff] text-brand-primary py-3 rounded-apple text-[15px] font-medium no-underline"
                 onClick={() => setOpen(false)}
               >
-                进入工作台
+                账号设置
               </Link>
               <button
                 onClick={handleLogout}

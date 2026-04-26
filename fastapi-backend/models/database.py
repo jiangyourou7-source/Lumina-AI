@@ -61,7 +61,7 @@ class Quota(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    total_quota = Column(Integer, default=20)
+    total_quota = Column(Integer, default=10)
     used_quota = Column(Integer, default=0)
     period_start = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     period_end = Column(DateTime, nullable=True)

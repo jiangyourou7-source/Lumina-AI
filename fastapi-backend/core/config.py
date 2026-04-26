@@ -17,5 +17,5 @@ if DATABASE_URL.startswith("postgres://"):
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-FREE_MONTHLY_QUOTA = int(os.getenv("FREE_MONTHLY_QUOTA", "20"))
+FREE_MONTHLY_QUOTA = int(os.getenv("FREE_MONTHLY_QUOTA", "10"))
 PRO_MONTHLY_QUOTA = int(os.getenv("PRO_MONTHLY_QUOTA", "500"))
