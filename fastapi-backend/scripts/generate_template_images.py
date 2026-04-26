@@ -35,8 +35,11 @@ async def ensure_bucket(client: httpx.AsyncClient, supabase_url: str, bucket: st
     response = await client.get(f"{supabase_url}/storage/v1/bucket/{bucket}")
     if response.status_code == 200:
         return
-    if response.status_code != 404:
-        raise RuntimeError(f"Bucket check failed: {response.status_code} {response.text[:300]}")
+
+    body = response.text[:300]
+    bucket_missing = response.status_code == 404 or "Bucket not found" in body
+    if not bucket_missing:
+        raise RuntimeError(f"Bucket check failed: {response.status_code} {body}")
 
     create = await client.post(
         f"{supabase_url}/storage/v1/bucket",
