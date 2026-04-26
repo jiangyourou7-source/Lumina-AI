@@ -11,6 +11,7 @@ import {
   Grid3X3,
   ImagePlus,
   Layers,
+  LogOut,
   Maximize2,
   Mic,
   MousePointer2,
@@ -78,6 +79,8 @@ const emptyDocument: CanvasDocument = {
   elements: [],
 };
 
+const DEFAULT_PROJECT_TITLE = "未命名项目";
+
 const skills = [
   "广告创意",
   "Instagram Post",
@@ -126,7 +129,7 @@ async function loadImage(src: string) {
 
 export default function EditorPage() {
   const router = useRouter();
-  const [title, setTitle] = useState("Untitled");
+  const [title, setTitle] = useState(DEFAULT_PROJECT_TITLE);
   const [canvasId, setCanvasId] = useState<number | null>(null);
   const [doc, setDoc] = useState<CanvasDocument>(emptyDocument);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -135,6 +138,7 @@ export default function EditorPage() {
   const [message, setMessage] = useState("");
   const [stageScale, setStageScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(true);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [quality, setQuality] = useState("低");
   const [ratio, setRatio] = useState("1:1");
   const [imageCount, setImageCount] = useState(1);
@@ -287,10 +291,11 @@ export default function EditorPage() {
 
   function resetCanvas() {
     setCanvasId(null);
-    setTitle("Untitled");
+    setTitle(DEFAULT_PROJECT_TITLE);
     setDoc(emptyDocument);
     setActiveId(null);
     setMessage("");
+    setProjectMenuOpen(false);
   }
 
   async function renderToDataUrl(maxSize = CANVAS_SIZE) {
@@ -349,9 +354,10 @@ export default function EditorPage() {
     try {
       const thumbnail = await renderToDataUrl(360);
       const payload = doc as unknown as Record<string, unknown>;
+      const safeTitle = title.trim() || DEFAULT_PROJECT_TITLE;
       const saved = canvasId
-        ? await updateCanvas(canvasId, { title, canvas_data: payload, thumbnail })
-        : await saveCanvas(title, payload, thumbnail);
+        ? await updateCanvas(canvasId, { title: safeTitle, canvas_data: payload, thumbnail })
+        : await saveCanvas(safeTitle, payload, thumbnail);
 
       setCanvasId(saved.id);
       setTitle(saved.title);
@@ -372,6 +378,7 @@ export default function EditorPage() {
       setDoc(normalizeCanvasData(data.canvas_data));
       setActiveId(null);
       setMessage("画布已打开");
+      setProjectMenuOpen(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "打开失败");
     }
@@ -387,16 +394,73 @@ export default function EditorPage() {
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
+            aria-label="项目名字"
             className="h-8 w-48 rounded-[9px] bg-transparent px-1 text-[15px] font-semibold outline-none hover:bg-white/70 focus:bg-white"
           />
-          <button className="rounded-full p-1.5 text-[#8e8e93] hover:bg-white" title="保存状态">
+          <button
+            onClick={() => setProjectMenuOpen((open) => !open)}
+            className="rounded-full p-1.5 text-[#8e8e93] hover:bg-white"
+            title="项目菜单"
+          >
             <ChevronDown className="h-4 w-4" />
           </button>
+          {projectMenuOpen && (
+            <div className="absolute left-14 top-11 z-40 w-[300px] rounded-[18px] border border-black/10 bg-white p-2 shadow-[0_18px_55px_rgba(0,0,0,0.16)]">
+              <button
+                onClick={resetCanvas}
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+              >
+                <Plus className="h-4 w-4" />
+                新建项目
+              </button>
+
+              <div className="my-2 h-px bg-black/5" />
+              <div className="px-3 pb-1 text-[12px] font-medium text-[#8e8e93]">已保存项目</div>
+              <div className="max-h-56 overflow-y-auto">
+                {canvasList.length === 0 ? (
+                  <p className="px-3 py-3 text-[13px] text-[#b3b3b8]">暂无保存项目</p>
+                ) : (
+                  canvasList.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleLoadCanvas(item.id)}
+                      className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2.5 text-left hover:bg-[#f5f5f7] ${
+                        canvasId === item.id ? "text-[#007AFF]" : "text-[#1d1d1f]"
+                      }`}
+                    >
+                      <span className="truncate text-[14px]">{item.title || DEFAULT_PROJECT_TITLE}</span>
+                      <span className="ml-3 text-[12px] text-[#b3b3b8]">v{item.version}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="my-2 h-px bg-black/5" />
+              <button
+                onClick={refreshCanvasList}
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+              >
+                <RotateCcw className="h-4 w-4" />
+                刷新项目
+              </button>
+              <button
+                onClick={() => router.push("/studio")}
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#d70015] hover:bg-[#fff1f2]"
+              >
+                <LogOut className="h-4 w-4" />
+                退出画布
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-[12px] text-[#8e8e93]">
           <span>0</span>
-          <button className="flex h-7 w-7 items-center justify-center rounded-full bg-[#007AFF] text-white">
+          <button
+            onClick={() => router.push("/settings")}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-[#007AFF] text-white"
+            title="账号设置"
+          >
             <Bot className="h-4 w-4" />
           </button>
         </div>

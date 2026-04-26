@@ -11,7 +11,6 @@ const navLinks = [
   { href: "/editor", label: "画布编辑" },
   { href: "/templates", label: "模板库" },
   { href: "/gallery", label: "作品库" },
-  { href: "/pricing", label: "定价" },
 ];
 
 export function Navbar() {

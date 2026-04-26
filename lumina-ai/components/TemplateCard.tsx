@@ -1,3 +1,4 @@
+import { ImageIcon } from "lucide-react";
 import { Card } from "./Card";
 
 interface TemplateCardProps {
@@ -9,11 +10,11 @@ interface TemplateCardProps {
 }
 
 const categoryColors: Record<string, string> = {
-  "电商类": "from-blue-50 to-indigo-100",
-  "餐饮零售": "from-orange-50 to-amber-100",
-  "品牌营销": "from-purple-50 to-pink-100",
-  "节日活动": "from-red-50 to-rose-100",
-  "企业宣传": "from-emerald-50 to-teal-100",
+  电商类: "from-blue-50 to-indigo-100",
+  餐饮零售: "from-orange-50 to-amber-100",
+  品牌营销: "from-purple-50 to-pink-100",
+  节日活动: "from-red-50 to-rose-100",
+  企业宣传: "from-emerald-50 to-teal-100",
 };
 
 export function TemplateCard({ category, title, prompt, imageUrl, onUse }: TemplateCardProps) {
@@ -21,15 +22,19 @@ export function TemplateCard({ category, title, prompt, imageUrl, onUse }: Templ
 
   return (
     <Card hover padding="sm">
-      <div className={`aspect-[4/3] rounded-[12px] overflow-hidden mb-4 bg-gradient-to-br ${gradientClass} flex items-center justify-center`}>
+      <div className={`aspect-[4/3] rounded-[12px] overflow-hidden mb-4 bg-gradient-to-br ${gradientClass}`}>
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={title}
             className="w-full h-full object-cover"
+            loading="lazy"
           />
         ) : (
-          <span className="text-[15px] font-medium text-black/20">{category}</span>
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-black/25">
+            <ImageIcon className="h-7 w-7" />
+            <span className="text-[13px] font-medium">{category}</span>
+          </div>
         )}
       </div>
       <div className="space-y-2 px-1">

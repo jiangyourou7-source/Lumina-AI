@@ -28,7 +28,6 @@ export function Footer() {
         <div>
           <h4 className="text-[15px] font-medium mb-4">支持</h4>
           <div className="space-y-3">
-            <Link href="/pricing" className="block text-caption text-text-secondary hover:text-text-primary no-underline">定价方案</Link>
             <span className="block text-caption text-text-tertiary">帮助中心</span>
             <span className="block text-caption text-text-tertiary">联系我们</span>
           </div>

@@ -70,6 +70,8 @@ Frontend:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_TEMPLATE_BUCKET=lumina-templates
 ```
 
 Do not commit real `.env`, `.env.local`, API keys, or database passwords.
@@ -109,6 +111,9 @@ CORS_ORIGINS=https://your-vercel-domain.vercel.app
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 FREE_MONTHLY_QUOTA=20
 PRO_MONTHLY_QUOTA=500
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+SUPABASE_TEMPLATE_BUCKET=lumina-templates
 ```
 
 Start command:
@@ -132,6 +137,27 @@ Vercel environment variable:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=https://your-render-api.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_TEMPLATE_BUCKET=lumina-templates
+```
+
+### Template Image Generation
+
+Template images are stored in a public Supabase Storage bucket named `lumina-templates`.
+
+Run the one-time generation script after configuring APIMart and Supabase service-role credentials:
+
+```bash
+cd fastapi-backend
+python scripts/generate_template_images.py
+```
+
+Useful options:
+
+```bash
+python scripts/generate_template_images.py --limit 3
+python scripts/generate_template_images.py --only ecommerce-minimal-product
+python scripts/generate_template_images.py --force
 ```
 
 After deployment, add the Vercel domain to Render:
