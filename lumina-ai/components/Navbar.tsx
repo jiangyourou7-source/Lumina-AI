@@ -25,6 +25,7 @@ export function Navbar() {
   }, [pathname]);
 
   const startHref = authed ? "/studio" : "/login?next=/studio";
+  const accountHref = authed ? "/settings" : "/login?mode=register&next=/studio";
 
   const handleLogout = () => {
     logout();
@@ -72,7 +73,7 @@ export function Navbar() {
                 退出
               </button>
               <Link
-                href="/settings"
+                href={accountHref}
                 prefetch={false}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef5ff] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
                 aria-label="账号设置"
@@ -96,6 +97,15 @@ export function Navbar() {
                 className="bg-brand-primary text-white px-5 py-2 rounded-apple text-[15px] font-medium hover:scale-[1.02] hover:shadow-card transition-all duration-200 no-underline"
               >
                 开始创作
+              </Link>
+              <Link
+                href={accountHref}
+                prefetch={false}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef5ff] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
+                aria-label="注册账号"
+                title="注册账号"
+              >
+                <UserRound className="h-5 w-5" />
               </Link>
             </>
           )}
@@ -164,6 +174,14 @@ export function Navbar() {
                 onClick={() => setOpen(false)}
               >
                 开始创作
+              </Link>
+              <Link
+                href={accountHref}
+                prefetch={false}
+                className="block w-full text-center bg-[#eef5ff] text-brand-primary py-3 rounded-apple text-[15px] font-medium no-underline"
+                onClick={() => setOpen(false)}
+              >
+                注册账号
               </Link>
             </>
           )}

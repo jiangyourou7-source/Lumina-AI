@@ -41,6 +41,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     const safeNext = getSafeNextPath();
+    const params = new URLSearchParams(window.location.search);
+    const requestedMode = params.get("mode");
+    if (requestedMode === "register" || requestedMode === "login") {
+      setMode(requestedMode);
+    }
     setNextPath(safeNext);
     if (isAuthenticated()) {
       router.replace(safeNext);
