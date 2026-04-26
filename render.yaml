@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: lumina-ai-api
+    runtime: python
+    rootDir: fastapi-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.apimart.ai/v1
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-2
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+      - key: FREE_MONTHLY_QUOTA
+        value: "20"
+      - key: PRO_MONTHLY_QUOTA
+        value: "500"
