@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BadgePercent, Check, ImagePlus, LayoutDashboard, LogOut, UserRound } from "lucide-react";
+import { ArrowRight, Check, ImagePlus, LayoutDashboard, LogOut, UserRound } from "lucide-react";
 import { getUserProfile, isAuthenticated, logout } from "@/lib/openai-proxy";
 
 interface ProfileState {
@@ -22,11 +22,9 @@ interface ProfileState {
 }
 
 const TOP_UP_OPTIONS = [
-  { id: "starter", price: "¥1", credits: "5 张", unit: "¥0.20/张", note: "体验充值" },
-  { id: "standard", price: "¥10", credits: "50 张", unit: "¥0.20/张", note: "日常使用" },
-  { id: "business", price: "¥100", credits: "500 张", unit: "¥0.20/张", note: "团队常用" },
-  { id: "growth", price: "¥500", credits: "2800 张", unit: "约 ¥0.18/张", note: "量大优惠" },
-  { id: "scale", price: "¥1000", credits: "6000 张", unit: "约 ¥0.17/张", note: "深度优惠" },
+  { id: "starter", price: "¥9.9", credits: "50 张", unit: "约 ¥0.20/张" },
+  { id: "standard", price: "¥99.9", credits: "500 张", unit: "约 ¥0.20/张" },
+  { id: "business", price: "¥499.9", credits: "2800 张", unit: "约 ¥0.18/张" },
 ];
 
 function getPlanLabel(plan: string) {
@@ -41,7 +39,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedTopUp, setSelectedTopUp] = useState(TOP_UP_OPTIONS[1].id);
+  const [selectedTopUp, setSelectedTopUp] = useState(TOP_UP_OPTIONS[0].id);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -63,6 +61,11 @@ export default function SettingsPage() {
   const handleLogout = () => {
     logout();
     router.push("/login");
+  };
+
+  const handleContactAuthor = () => {
+    window.location.href =
+      "mailto:demo@lumina-mvp.com?subject=Lumina%20AI%20%E5%AE%9A%E5%88%B6%E5%85%85%E5%80%BC";
   };
 
   const planLabel = profile ? getPlanLabel(profile.user.plan || profile.quota.plan || "free") : "";
@@ -114,19 +117,6 @@ export default function SettingsPage() {
               </div>
 
               <div className="mt-6 border-t border-black/5 pt-6">
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div>
-                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#eef5ff] px-3 py-1 text-[12px] font-medium text-brand-primary">
-                      <BadgePercent className="h-3.5 w-3.5" />
-                      充值模式
-                    </div>
-                    <h3 className="text-[18px] font-semibold text-[#0f172a]">按张充值，基础价 2 角一张</h3>
-                    <p className="mt-1 text-[13px] text-text-secondary">
-                      支付通道接入后可直接购买额度；当前先展示档位和成本结构。
-                    </p>
-                  </div>
-                </div>
-
                 <div className="grid gap-3 sm:grid-cols-2">
                   {TOP_UP_OPTIONS.map((option) => {
                     const selected = selectedTopUp === option.id;
@@ -144,7 +134,6 @@ export default function SettingsPage() {
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
                             <p className="text-[22px] font-semibold text-[#0f172a]">{option.price}</p>
-                            <p className="text-[13px] text-text-secondary">{option.note}</p>
                           </div>
                           {selected ? (
                             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-primary text-white">
@@ -159,6 +148,16 @@ export default function SettingsPage() {
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={handleContactAuthor}
+                    className="rounded-[14px] border border-dashed border-brand-primary/35 bg-white p-4 text-left transition hover:border-brand-primary hover:bg-[#f8fbff]"
+                  >
+                    <div className="flex h-full min-h-[84px] items-center justify-between gap-4">
+                      <span className="text-[18px] font-semibold text-brand-primary">联系作者定制</span>
+                      <ArrowRight className="h-4 w-4 text-brand-primary" />
+                    </div>
+                  </button>
                 </div>
               </div>
             </section>
