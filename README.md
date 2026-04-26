@@ -61,6 +61,7 @@ Backend:
 OPENAI_API_KEY=your_apimart_api_key
 OPENAI_BASE_URL=https://api.apimart.ai/v1
 OPENAI_IMAGE_MODEL=gpt-image-2
+PYTHON_VERSION=3.11.9
 SECRET_KEY=replace-with-a-long-random-secret
 DATABASE_URL=sqlite+aiosqlite:///./lumina.db
 CORS_ORIGINS=http://localhost:3001
@@ -105,6 +106,7 @@ Render environment variables:
 OPENAI_API_KEY=your_apimart_api_key
 OPENAI_BASE_URL=https://api.apimart.ai/v1
 OPENAI_IMAGE_MODEL=gpt-image-2
+PYTHON_VERSION=3.11.9
 SECRET_KEY=replace-with-a-long-random-secret
 DATABASE_URL=your_supabase_postgres_url
 CORS_ORIGINS=https://your-vercel-domain.vercel.app
