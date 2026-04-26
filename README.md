@@ -1,29 +1,29 @@
 # Lumina AI
 
-Lumina AI 是面向中小企业和朋友圈精修场景的 AI 出图与画布编辑 MVP。
+Lumina AI is an AI image generation and canvas editing MVP for small business marketing visuals, ecommerce assets, and polished social posts.
 
-当前能力：
+Current capabilities:
 
-- 邮箱 + 密码注册登录
-- APIMart `gpt-image-2` 文生图 / 参考图编辑
-- 1k / 2k / 4k 分辨率档位
-- 作品库与用户账号绑定
-- 画布编辑 MVP
-- FastAPI 后端 + Next.js 前端
+- Email and password registration/login
+- APIMart `gpt-image-2` text-to-image and reference-image editing
+- 1k / 2k / 4k resolution options
+- Account-based gallery
+- Canvas editor MVP
+- FastAPI backend and Next.js frontend
 
-## 项目结构
+## Project Structure
 
 ```text
 .
-├── fastapi-backend/   # FastAPI API、鉴权、出图、作品库、画布数据
-├── lumina-ai/         # Next.js 前端
-├── render.yaml        # Render 后端部署蓝图
-└── README.md
++-- fastapi-backend/   # FastAPI API, auth, image generation, gallery, canvas data
++-- lumina-ai/         # Next.js frontend
++-- render.yaml        # Render backend deployment blueprint
+`-- README.md
 ```
 
-## 本地开发
+## Local Development
 
-### 1. 后端
+### Backend
 
 ```bash
 cd fastapi-backend
@@ -32,13 +32,13 @@ pip install -r requirements.txt
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-后端健康检查：
+Health check:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-### 2. 前端
+### Frontend
 
 ```bash
 cd lumina-ai
@@ -47,15 +47,15 @@ npm install
 npm run dev -- -p 3001
 ```
 
-访问：
+Open:
 
 ```text
 http://127.0.0.1:3001
 ```
 
-## 环境变量
+## Environment Variables
 
-后端必填：
+Backend:
 
 ```env
 OPENAI_API_KEY=your_apimart_api_key
@@ -66,38 +66,38 @@ DATABASE_URL=sqlite+aiosqlite:///./lumina.db
 CORS_ORIGINS=http://localhost:3001
 ```
 
-前端必填：
+Frontend:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-不要把真实 `.env`、`.env.local`、API Key、数据库密码提交到 GitHub。
+Do not commit real `.env`, `.env.local`, API keys, or database passwords.
 
-## 部署方案
+## Deployment
 
-推荐 MVP 部署：
+Recommended MVP stack:
 
-- 前端：Vercel
-- 后端：Render
-- 数据库：Supabase PostgreSQL
-- 邮箱服务：暂不接验证码服务，当前使用邮箱 + 密码注册登录
+- Frontend: Vercel
+- Backend: Render
+- Database: Supabase PostgreSQL
+- Email service: not connected yet; current MVP uses email + password login only
 
 ### Supabase PostgreSQL
 
-在 Supabase 创建项目后，复制连接字符串，并在 Render 后端环境变量中配置：
+Create a Supabase project and copy its PostgreSQL connection string. Configure it in Render:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres.your-project:your-password@aws-0-region.pooler.supabase.com:6543/postgres
 ```
 
-如果 Supabase 给的是 `postgresql://...`，后端会自动转换为 SQLAlchemy asyncpg 格式。
+If Supabase gives you a `postgresql://...` URL, the backend automatically converts it to SQLAlchemy's asyncpg URL format.
 
-### Render 后端
+### Render Backend
 
-可以直接使用根目录的 `render.yaml` 创建服务。
+Use the root `render.yaml` blueprint, or create a web service manually.
 
-Render 需要配置这些环境变量：
+Render environment variables:
 
 ```env
 OPENAI_API_KEY=your_apimart_api_key
@@ -111,15 +111,15 @@ FREE_MONTHLY_QUOTA=20
 PRO_MONTHLY_QUOTA=500
 ```
 
-启动命令：
+Start command:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-### Vercel 前端
+### Vercel Frontend
 
-Vercel 项目设置：
+Vercel settings:
 
 ```text
 Root Directory: lumina-ai
@@ -128,36 +128,34 @@ Build Command: npm run build
 Output Directory: .next
 ```
 
-Vercel 环境变量：
+Vercel environment variable:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=https://your-render-api.onrender.com
 ```
 
-部署后，把 Vercel 域名加入 Render 后端：
+After deployment, add the Vercel domain to Render:
 
 ```env
 CORS_ORIGINS=https://your-vercel-domain.vercel.app
 ```
 
-## 验证清单
+## Release Checklist
 
-上线前至少验证：
+- Register a new account
+- Log in
+- Generate a `gpt-image-2` image
+- Test 1k / 2k / 4k options
+- Save generated images to the gallery
+- Save and restore canvas data
+- Clear `lumina_token` and confirm protected pages redirect to login
+- Confirm `/health` returns `{"status":"healthy"}`
 
-- 注册新账号
-- 登录
-- 生成 `gpt-image-2` 图片
-- 选择 1k / 2k / 4k 参数
-- 作品保存到作品库
-- 画布保存与恢复
-- 清空 token 后访问工作台会跳转登录
-- `/health` 返回 `{"status":"healthy"}`
+## Production Follow-Ups
 
-## 后续生产化事项
-
-- 邮箱验证码或验证链接
-- 忘记密码 / 重置密码
-- 生产级数据库迁移工具，例如 Alembic
-- 对生成接口增加限流
-- 图片资源转存到自有对象存储
-- 更完整的用户套餐和支付系统
+- Email verification or magic link
+- Forgot password and reset password
+- Database migrations with Alembic
+- Rate limiting for generation endpoints
+- Store generated images in owned object storage
+- Plans, billing, and payment system
