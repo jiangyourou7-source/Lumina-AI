@@ -1,6 +1,11 @@
 export const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "lumina_session";
+const SESSION_COOKIE_SECURE_ENV = process.env.SESSION_COOKIE_SECURE;
 export const SESSION_COOKIE_SECURE =
-  process.env.SESSION_COOKIE_SECURE === "true" || process.env.NODE_ENV === "production";
+  SESSION_COOKIE_SECURE_ENV === "true"
+    ? true
+    : SESSION_COOKIE_SECURE_ENV === "false"
+      ? false
+      : process.env.NODE_ENV === "production";
 export const SESSION_COOKIE_SAMESITE =
   process.env.SESSION_COOKIE_SAMESITE === "strict" || process.env.SESSION_COOKIE_SAMESITE === "none"
     ? process.env.SESSION_COOKIE_SAMESITE
