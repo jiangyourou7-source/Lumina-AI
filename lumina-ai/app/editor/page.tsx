@@ -40,6 +40,7 @@ import {
 const CANVAS_SIZE = 1080;
 const SNAP_TOLERANCE = 10;
 const HISTORY_LIMIT = 80;
+const EDITOR_SETTINGS_SEEN_KEY = "drmine-editor-settings-seen";
 
 type CanvasElement =
   | {
@@ -305,7 +306,7 @@ export default function EditorPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [stageScale, setStageScale] = useState(1);
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [layerPanelOpen, setLayerPanelOpen] = useState(true);
   const [savedPanelOpen, setSavedPanelOpen] = useState(true);
@@ -346,6 +347,19 @@ export default function EditorPage() {
       mounted = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    try {
+      if (localStorage.getItem(EDITOR_SETTINGS_SEEN_KEY) !== "1") {
+        setSettingsOpen(true);
+        localStorage.setItem(EDITOR_SETTINGS_SEEN_KEY, "1");
+      }
+    } catch {
+      setSettingsOpen(true);
+    }
+  }, [authReady]);
 
   const activeElement = useMemo(
     () => doc.elements.find((element) => element.id === activeId) || null,
@@ -934,12 +948,6 @@ export default function EditorPage() {
               setSnapGuides([]);
             }}
           >
-            {doc.elements.length === 0 ? (
-              <p className="select-none text-[15px] text-[#B3B3B8]">
-                输入你的想法开始创作，或按 <span className="rounded bg-white px-2 py-1 text-[#8E8E93] shadow-sm">C</span> 开始对话
-              </p>
-            ) : null}
-
             <div
               className={`relative origin-center overflow-hidden transition-shadow ${
                 doc.elements.length === 0

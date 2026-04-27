@@ -474,40 +474,6 @@ function PocketToolsAnimation() {
     src: `/brand-tools/tool-${index + 1}.png`,
     angle: index * 60,
   }));
-  const particles = [
-    {
-      position: "left-[18%] top-[20%]",
-      size: "h-2.5 w-2.5",
-      color: "rgba(196, 222, 255, 0.55)",
-      glow: "0 0 22px rgba(196, 222, 255, 0.28)",
-      delay: "0s",
-      duration: "3.4s",
-    },
-    {
-      position: "right-[16%] top-[30%]",
-      size: "h-2 w-2",
-      color: "rgba(226, 232, 240, 0.55)",
-      glow: "0 0 18px rgba(226, 232, 240, 0.22)",
-      delay: "0.8s",
-      duration: "4s",
-    },
-    {
-      position: "left-[28%] bottom-[16%]",
-      size: "h-1.5 w-1.5",
-      color: "rgba(214, 228, 245, 0.5)",
-      glow: "0 0 16px rgba(214, 228, 245, 0.2)",
-      delay: "1.4s",
-      duration: "3.8s",
-    },
-    {
-      position: "right-[22%] bottom-[22%]",
-      size: "h-2.5 w-2.5",
-      color: "rgba(205, 226, 247, 0.48)",
-      glow: "0 0 20px rgba(205, 226, 247, 0.24)",
-      delay: "2.1s",
-      duration: "4.2s",
-    },
-  ];
 
   return (
     <div className="relative mx-auto mb-5 h-40 w-40">
@@ -536,19 +502,6 @@ function PocketToolsAnimation() {
       <div className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[24px] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.09)]">
         <BrandLogo className="h-14 w-14" />
       </div>
-      {particles.map((particle) => (
-        <span
-          key={`${particle.position}-${particle.delay}`}
-          className={`pointer-events-none absolute rounded-full ${particle.position} ${particle.size} animate-pulse`}
-          style={{
-            backgroundColor: particle.color,
-            boxShadow: particle.glow,
-            animationDelay: particle.delay,
-            animationDuration: particle.duration,
-            opacity: 0.75,
-          }}
-        />
-      ))}
     </div>
   );
 }
