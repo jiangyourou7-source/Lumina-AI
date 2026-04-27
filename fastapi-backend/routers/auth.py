@@ -11,17 +11,18 @@ from models.schemas import (
     PasswordResetConfirm,
     PasswordResetRequest,
     QuotaInfo,
-    TokenResponse,
+    SessionAuthResponse,
     UserCreate,
     UserInfo,
     UserLogin,
     UserProfileResponse,
 )
-from core.security import get_password_hash, verify_password, create_access_token, get_current_user
+from core.security import get_current_session_token, get_current_user, get_password_hash, verify_password
 from core.config import PASSWORD_RESET_BASE_URL, PASSWORD_RESET_EXPIRE_MINUTES
 from core.database import get_db
 from services.billing import get_quota_info
 from services.email_service import send_password_reset_email
+from services.session_service import create_user_session, revoke_user_session
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 PASSWORD_RESET_SENT_MESSAGE = "如果该邮箱已注册，重置邮件已发送"
@@ -39,7 +40,7 @@ def as_aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=SessionAuthResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
     existing = result.scalar_one_or_none()
@@ -56,9 +57,9 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
 
-    token = create_access_token({"sub": user.email})
-    return TokenResponse(
-        access_token=token,
+    session_token = await create_user_session(db, user)
+    return SessionAuthResponse(
+        session_token=session_token,
         user=UserInfo(
             id=user.id,
             email=user.email,
@@ -69,16 +70,16 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=SessionAuthResponse)
 async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
 
-    token = create_access_token({"sub": user.email})
-    return TokenResponse(
-        access_token=token,
+    session_token = await create_user_session(db, user)
+    return SessionAuthResponse(
+        session_token=session_token,
         user=UserInfo(
             id=user.id,
             email=user.email,
@@ -87,6 +88,15 @@ async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db)):
             plan=user.plan,
         ),
     )
+
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout(
+    token: str = Depends(get_current_session_token),
+    db: AsyncSession = Depends(get_db),
+):
+    await revoke_user_session(db, token)
+    return MessageResponse(message="已退出登录")
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

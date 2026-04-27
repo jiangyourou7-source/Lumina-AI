@@ -14,7 +14,7 @@ async def send_password_reset_email(email: str, reset_url: str) -> bool:
 
     html = f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;color:#111827">
-      <h2>重置你的 Drmine AI 密码</h2>
+      <h2>重置你的 Drmina AI 密码</h2>
       <p>点击下面的按钮设置新密码。链接 30 分钟内有效。</p>
       <p>
         <a href="{reset_url}" style="display:inline-block;background:#007aff;color:#fff;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:600">
@@ -30,7 +30,7 @@ async def send_password_reset_email(email: str, reset_url: str) -> bool:
     payload = {
         "from": EMAIL_FROM,
         "to": [email],
-        "subject": "重置你的 Drmine AI 密码",
+        "subject": "重置你的 Drmina AI 密码",
         "html": html,
     }
 

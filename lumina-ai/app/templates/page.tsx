@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { TemplateCard } from "@/components/TemplateCard";
@@ -10,6 +10,7 @@ export default function TemplatesPage() {
   const router = useRouter();
   const [activeCat, setActiveCat] = useState("all");
   const [search, setSearch] = useState("");
+  const [previewImage, setPreviewImage] = useState<{ imageUrl: string; title: string } | null>(null);
 
   const filtered = templates.filter((template) => {
     const matchCat = activeCat === "all" || template.category === activeCat;
@@ -81,6 +82,12 @@ export default function TemplatesPage() {
             title={template.title}
             prompt={template.prompt}
             imageUrl={getTemplateImageUrl(template.storagePath)}
+            onPreview={() =>
+              setPreviewImage({
+                imageUrl: getTemplateImageUrl(template.storagePath),
+                title: template.title,
+              })
+            }
             onUse={() => handleUseTemplate(template.prompt)}
           />
         ))}
@@ -91,6 +98,94 @@ export default function TemplatesPage() {
           <p className="text-body text-text-secondary">未找到匹配的模板</p>
         </div>
       )}
+
+      <TemplateImagePreviewModal
+        open={!!previewImage}
+        imageUrl={previewImage?.imageUrl || ""}
+        title={previewImage?.title || ""}
+        onClose={() => setPreviewImage(null)}
+      />
+    </div>
+  );
+}
+
+function TemplateImagePreviewModal({
+  open,
+  imageUrl,
+  title,
+  onClose,
+}: {
+  open: boolean;
+  imageUrl: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const [rendered, setRendered] = useState(open);
+  const [visible, setVisible] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setRendered(true);
+      const frame = window.requestAnimationFrame(() => setVisible(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    setVisible(false);
+    const timeout = window.setTimeout(() => setRendered(false), 180);
+    return () => window.clearTimeout(timeout);
+  }, [open]);
+
+  useEffect(() => {
+    if (!rendered) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [rendered, onClose]);
+
+  if (!rendered || !imageUrl) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
+      <div
+        className={`absolute inset-0 bg-black/72 transition-opacity duration-200 ease-out ${
+          visible ? "opacity-100" : "opacity-0"
+        }`}
+      />
+
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="关闭图片预览"
+        className={`absolute right-4 top-4 z-[1] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-all duration-200 ease-out hover:bg-white/16 sm:right-6 sm:top-6 ${
+          visible ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
+        }`}
+      >
+        <span className="text-[28px] leading-none">×</span>
+      </button>
+
+      <div
+        className={`relative transition-all duration-[180ms] ease-out ${
+          visible ? "scale-100 opacity-100" : "scale-[0.96] opacity-0"
+        }`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <img
+          src={imageUrl}
+          alt={title || "模板预览"}
+          className="h-auto max-h-[85vh] w-auto max-w-[92vw] rounded-[18px] object-contain shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:max-w-[90vw]"
+        />
+      </div>
     </div>
   );
 }

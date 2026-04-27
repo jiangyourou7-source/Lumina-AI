@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Check, ImagePlus, LayoutDashboard, LogOut, UserRound } from "lucide-react";
-import { getUserProfile, isAuthenticated, logout } from "@/lib/openai-proxy";
+import { AUTH_REQUIRED_MESSAGE } from "@/lib/auth-constants";
+import { BRAND_NAME, SUPPORT_EMAIL } from "@/lib/brand";
+import { getUserProfile, logout } from "@/lib/openai-proxy";
 
 interface ProfileState {
   user: {
@@ -42,14 +44,15 @@ export default function SettingsPage() {
   const [selectedTopUp, setSelectedTopUp] = useState(TOP_UP_OPTIONS[0].id);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login?next=/settings");
-      return;
-    }
-
     getUserProfile()
       .then((data) => setProfile(data as ProfileState))
-      .catch((err) => setError(err instanceof Error ? err.message : "获取账号信息失败"))
+      .catch((err) => {
+        if (err instanceof Error && err.message === AUTH_REQUIRED_MESSAGE) {
+          router.replace("/login?next=/settings");
+          return;
+        }
+        setError(err instanceof Error ? err.message : "获取账户信息失败");
+      })
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -58,14 +61,14 @@ export default function SettingsPage() {
     return Math.min(100, Math.round((profile.quota.used / profile.quota.total) * 100));
   }, [profile]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push("/login");
   };
 
   const handleContactAuthor = () => {
     window.location.href =
-      "mailto:demo@drmine.ai?subject=Drmine%20AI%20%E5%AE%9A%E5%88%B6%E5%85%85%E5%80%BC";
+      `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`${BRAND_NAME} 定制咨询`)}`;
   };
 
   const planLabel = profile ? getPlanLabel(profile.user.plan || profile.quota.plan || "free") : "";
@@ -75,12 +78,12 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8">
           <p className="mb-2 text-[13px] font-medium uppercase tracking-[0.16em] text-brand-primary">Account</p>
-          <h1 className="text-h1 text-[#0f172a]">账号设置</h1>
+          <h1 className="text-h1 text-[#0f172a]">账户设置</h1>
         </div>
 
         {loading ? (
           <div className="rounded-[18px] border border-black/5 bg-white p-8 text-text-secondary shadow-card">
-            正在加载账号信息...
+            正在加载账户信息...
           </div>
         ) : error ? (
           <div className="rounded-[18px] border border-red-100 bg-white p-8 text-[#d70015] shadow-card">
@@ -117,6 +120,9 @@ export default function SettingsPage() {
               </div>
 
               <div className="mt-6 border-t border-black/5 pt-6">
+                <p className="mb-4 text-[13px] leading-6 text-text-secondary">
+                  在线支付尚未接入，当前额度开通和升级以人工处理为主。
+                </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {TOP_UP_OPTIONS.map((option) => {
                     const selected = selectedTopUp === option.id;
@@ -163,11 +169,11 @@ export default function SettingsPage() {
             </section>
 
             <aside className="space-y-3">
-              <QuickLink href="/studio" icon={<ImagePlus className="h-4 w-4" />} title="创作工作室" />
+              <QuickLink href="/studio" icon={<ImagePlus className="h-4 w-4" />} title="创作工作台" />
               <QuickLink href="/editor" icon={<LayoutDashboard className="h-4 w-4" />} title="画布编辑" />
               <QuickLink href="/gallery" icon={<ArrowRight className="h-4 w-4" />} title="作品库" />
               <button
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 className="flex w-full items-center justify-between rounded-[14px] border border-black/5 bg-white px-4 py-4 text-left text-[#d70015] shadow-sm transition hover:border-red-100 hover:bg-[#fff7f7]"
               >
                 <span className="inline-flex items-center gap-3 text-[15px] font-medium">

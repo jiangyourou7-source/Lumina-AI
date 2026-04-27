@@ -1,15 +1,13 @@
-from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import bcrypt
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.database import User
-from core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from core.database import get_db
 
-security = HTTPBearer()
+from core.database import get_db
+from models.database import User, UserSession
+from services.session_service import get_user_session
+
+security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -23,45 +21,38 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+async def get_current_session_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str:
+    if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="请先登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
 
 
-def decode_access_token(token: str) -> dict | None:
-    try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
-        return None
+async def get_current_session(
+    token: str = Depends(get_current_session_token),
+    db: AsyncSession = Depends(get_db),
+) -> UserSession:
+    session = await get_user_session(db, token)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态已失效，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return session
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
 ) -> User:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证令牌",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    email = payload.get("sub")
-    if email is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证令牌",
-        )
-
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    if user is None:
+    if session.user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在",
         )
-    return user
+    return session.user

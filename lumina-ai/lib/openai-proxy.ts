@@ -1,36 +1,19 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-export const AUTH_REQUIRED_MESSAGE = "请先登录";
-
-function getStoredToken() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("lumina_token");
-}
-
-function setStoredToken(token: string) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("lumina_token", token);
-  }
-}
-
-function clearStoredToken() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("lumina_token");
-  }
-}
+import { AUTH_REQUIRED_MESSAGE } from "@/lib/auth-constants";
 
 async function parseError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null);
   return data?.detail || data?.error || fallback;
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const token = getStoredToken();
-  if (!token) {
-    throw new Error(AUTH_REQUIRED_MESSAGE);
-  }
+function withJsonHeaders(options: RequestInit = {}) {
   return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    ...options,
+    credentials: "same-origin" as const,
+    cache: "no-store" as const,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   };
 }
 
@@ -38,19 +21,12 @@ async function apiJson<T>(
   path: string,
   options: RequestInit = {},
   fallbackError = "请求失败",
-  retry = true
+  clearSessionOnAuthError = true
 ): Promise<T> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...(options.headers || {}),
-    },
-  });
+  const response = await fetch(path, withJsonHeaders(options));
 
-  if ((response.status === 401 || response.status === 403) && retry) {
-    clearStoredToken();
+  if ((response.status === 401 || response.status === 403) && clearSessionOnAuthError) {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
     throw new Error(AUTH_REQUIRED_MESSAGE);
   }
 
@@ -136,49 +112,54 @@ export interface UserInfo {
 }
 
 export interface AuthResult {
-  access_token: string;
-  token_type: string;
+  user: UserInfo;
+}
+
+export interface SessionInfo {
+  authenticated: boolean;
   user: UserInfo;
 }
 
 export async function register(email: string, password: string, name?: string): Promise<AuthResult> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name }),
-  });
+  const response = await fetch(
+    "/api/auth/register",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ email, password, name }),
+    })
+  );
 
   if (!response.ok) {
     throw new Error(await parseError(response, "注册失败"));
   }
 
-  const result = await response.json();
-  setStoredToken(result.access_token);
-  return result;
+  return response.json();
 }
 
 export async function login(email: string, password: string): Promise<AuthResult> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  const response = await fetch(
+    "/api/auth/login",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    })
+  );
 
   if (!response.ok) {
     throw new Error(await parseError(response, "登录失败"));
   }
 
-  const result = await response.json();
-  setStoredToken(result.access_token);
-  return result;
+  return response.json();
 }
 
 export async function requestPasswordReset(email: string): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+  const response = await fetch(
+    "/api/auth/forgot-password",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ email }),
+    })
+  );
 
   if (!response.ok) {
     throw new Error(await parseError(response, "发送重置邮件失败"));
@@ -188,11 +169,13 @@ export async function requestPasswordReset(email: string): Promise<{ message: st
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, new_password: newPassword }),
-  });
+  const response = await fetch(
+    "/api/auth/reset-password",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    })
+  );
 
   if (!response.ok) {
     throw new Error(await parseError(response, "重置密码失败"));
@@ -201,8 +184,25 @@ export async function resetPassword(token: string, newPassword: string): Promise
   return response.json();
 }
 
+export async function getSession(): Promise<SessionInfo | null> {
+  const response = await fetch("/api/auth/session", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "获取会话失败"));
+  }
+
+  return response.json();
+}
+
 export async function getUserProfile() {
-  return apiJson("/api/auth/me", {}, "获取用户信息失败");
+  return apiJson("/api/auth/me", {}, "获取用户信息失败", true);
 }
 
 export interface GalleryItem {
@@ -308,10 +308,13 @@ export async function deleteCanvas(canvasId: number) {
   return apiJson(`/api/canvas/${canvasId}`, { method: "DELETE" }, "删除画布失败");
 }
 
-export function logout() {
-  clearStoredToken();
+export async function logout() {
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => undefined);
 }
 
-export function isAuthenticated(): boolean {
-  return !!getStoredToken();
+export async function isAuthenticated(): Promise<boolean> {
+  return !!(await getSession());
 }

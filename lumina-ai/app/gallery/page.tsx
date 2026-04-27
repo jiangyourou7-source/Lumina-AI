@@ -6,7 +6,8 @@ import { Search, X, Download, FolderOpen, Trash2 } from "lucide-react";
 import { Card } from "@/components/Card";
 import { Modal } from "@/components/Modal";
 import { AppleButton } from "@/components/AppleButton";
-import { deleteGalleryItem, getGallery, isAuthenticated } from "@/lib/openai-proxy";
+import { deleteGalleryItem, getGallery } from "@/lib/openai-proxy";
+import { AUTH_REQUIRED_MESSAGE } from "@/lib/auth-constants";
 
 interface GalleryItem {
   id: string;
@@ -40,11 +41,6 @@ export default function GalleryPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login?next=/gallery");
-      return;
-    }
-
     let mounted = true;
 
     async function loadGallery() {
@@ -63,8 +59,12 @@ export default function GalleryPage() {
             category: item.category,
           }))
         );
-      } catch {
+      } catch (error) {
         if (!mounted) return;
+        if (error instanceof Error && error.message === AUTH_REQUIRED_MESSAGE) {
+          router.replace("/login?next=/gallery");
+          return;
+        }
         const localGallery = getLocalGallery();
         setItems([...localGallery, ...defaultGallery]);
       } finally {
@@ -191,7 +191,7 @@ export default function GalleryPage() {
         <div className="text-center py-24">
           <FolderOpen className="w-16 h-16 text-text-tertiary mx-auto mb-4" />
           <p className="text-body text-text-secondary">暂无作品</p>
-          <p className="text-caption text-text-tertiary mt-1">去创作工作室开始创作吧</p>
+          <p className="text-caption text-text-tertiary mt-1">去创作工作台开始创作吧</p>
         </div>
       ) : (
         <>

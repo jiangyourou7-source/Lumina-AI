@@ -11,7 +11,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
-import { editImage, generateImage, isAuthenticated } from "@/lib/openai-proxy";
+import { editImage, generateImage, getSession } from "@/lib/openai-proxy";
 
 type StudioState = "idle" | "generating" | "success" | "error";
 
@@ -81,12 +81,26 @@ export default function StudioPage() {
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [generatedUrls, setGeneratedUrls] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
+  const [authReady, setAuthReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login?next=/studio");
-    }
+    let mounted = true;
+    void getSession()
+      .then((session) => {
+        if (!mounted) return;
+        if (!session) {
+          router.replace("/login?next=/studio");
+          return;
+        }
+        setAuthReady(true);
+      })
+      .catch(() => {
+        if (mounted) router.replace("/login?next=/studio");
+      });
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -215,7 +229,7 @@ export default function StudioPage() {
     });
   };
 
-  return (
+  return authReady ? (
     <div className="h-[calc(100vh-64px)] flex bg-[#F8FAFC]">
       <div className="w-[440px] min-w-[440px] border-r border-[#E2E8F0] bg-white flex flex-col h-full">
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
@@ -411,7 +425,7 @@ export default function StudioPage() {
                 </div>
               </div>
               <p className="text-[12px] text-[#94A3B8] text-center mt-3">
-                Image link valid for 24 hours
+                图片链接有效期为 24 小时
               </p>
               {generatedUrls.length > 1 && (
                 <div className="mt-4 grid grid-cols-4 gap-3">
@@ -450,6 +464,8 @@ export default function StudioPage() {
         </div>
       </div>
     </div>
+  ) : (
+    <div className="h-[calc(100vh-64px)] bg-[#F8FAFC]" />
   );
 }
 
@@ -458,18 +474,52 @@ function PocketToolsAnimation() {
     src: `/brand-tools/tool-${index + 1}.png`,
     angle: index * 60,
   }));
+  const particles = [
+    {
+      position: "left-[18%] top-[20%]",
+      size: "h-2.5 w-2.5",
+      color: "rgba(196, 222, 255, 0.55)",
+      glow: "0 0 22px rgba(196, 222, 255, 0.28)",
+      delay: "0s",
+      duration: "3.4s",
+    },
+    {
+      position: "right-[16%] top-[30%]",
+      size: "h-2 w-2",
+      color: "rgba(226, 232, 240, 0.55)",
+      glow: "0 0 18px rgba(226, 232, 240, 0.22)",
+      delay: "0.8s",
+      duration: "4s",
+    },
+    {
+      position: "left-[28%] bottom-[16%]",
+      size: "h-1.5 w-1.5",
+      color: "rgba(214, 228, 245, 0.5)",
+      glow: "0 0 16px rgba(214, 228, 245, 0.2)",
+      delay: "1.4s",
+      duration: "3.8s",
+    },
+    {
+      position: "right-[22%] bottom-[22%]",
+      size: "h-2.5 w-2.5",
+      color: "rgba(205, 226, 247, 0.48)",
+      glow: "0 0 20px rgba(205, 226, 247, 0.24)",
+      delay: "2.1s",
+      duration: "4.2s",
+    },
+  ];
 
   return (
     <div className="relative mx-auto mb-5 h-40 w-40">
-      <div className="absolute inset-4 rounded-full bg-[#E5F2FF] blur-2xl" />
+      <div className="absolute inset-4 rounded-full bg-[#EEF6FF] opacity-80 blur-2xl" />
       <div
-        className="absolute inset-2 rounded-full border border-dashed border-[#BFE3FF]"
+        className="absolute inset-2 rounded-full border border-dashed border-[#D6E7FA]"
         style={{ animation: "spin 9s linear infinite" }}
       >
         {tools.map((tool) => (
           <div
             key={tool.src}
-            className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[14px] border border-[#D7E9FF] bg-white shadow-sm"
+            className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[14px] border border-[#E1ECFA] bg-white/95 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
             style={{
               transform: `translate(-50%, -50%) rotate(${tool.angle}deg) translateY(-68px) rotate(-${tool.angle}deg)`,
             }}
@@ -483,11 +533,22 @@ function PocketToolsAnimation() {
           </div>
         ))}
       </div>
-      <div className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[24px] bg-white shadow-card">
+      <div className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[24px] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.09)]">
         <BrandLogo className="h-14 w-14" />
       </div>
-      <span className="absolute left-1/2 top-4 h-2 w-2 -translate-x-1/2 rounded-full bg-[#30D158] animate-pulse" />
-      <span className="absolute bottom-8 right-5 h-2.5 w-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
+      {particles.map((particle) => (
+        <span
+          key={`${particle.position}-${particle.delay}`}
+          className={`pointer-events-none absolute rounded-full ${particle.position} ${particle.size} animate-pulse`}
+          style={{
+            backgroundColor: particle.color,
+            boxShadow: particle.glow,
+            animationDelay: particle.delay,
+            animationDuration: particle.duration,
+            opacity: 0.75,
+          }}
+        />
+      ))}
     </div>
   );
 }

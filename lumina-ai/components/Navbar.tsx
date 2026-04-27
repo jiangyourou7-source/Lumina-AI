@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Menu, X, UserRound } from "lucide-react";
+import { Menu, UserRound, X } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
-import { isAuthenticated, logout } from "@/lib/openai-proxy";
+import { BRAND_NAME } from "@/lib/brand";
+import { getSession, logout } from "@/lib/openai-proxy";
 
 const navLinks = [
-  { href: "/studio", label: "创作工作室" },
+  { href: "/studio", label: "创作工作台" },
   { href: "/editor", label: "画布编辑" },
   { href: "/templates", label: "模板库" },
   { href: "/gallery", label: "作品库" },
@@ -21,15 +22,25 @@ export function Navbar() {
   const [authed, setAuthed] = useState(false);
 
   useEffect(() => {
-    setAuthed(isAuthenticated());
+    let mounted = true;
+    void getSession()
+      .then((session) => {
+        if (mounted) setAuthed(!!session);
+      })
+      .catch(() => {
+        if (mounted) setAuthed(false);
+      });
     setOpen(false);
+    return () => {
+      mounted = false;
+    };
   }, [pathname]);
 
   const startHref = authed ? "/studio" : "/login?next=/studio";
   const accountHref = authed ? "/settings" : "/login?mode=register&next=/studio";
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setAuthed(false);
     setOpen(false);
     router.push("/login");
@@ -41,13 +52,17 @@ export function Navbar() {
 
   return (
     <header className="glass sticky top-0 z-50">
-      <nav className="max-w-desktop mx-auto flex items-center justify-between px-6 h-16">
-        <Link href="/" prefetch={false} className="flex items-center gap-2 text-h3 text-[#0F172A] no-underline">
+      <nav className="max-w-desktop mx-auto flex h-16 items-center justify-between px-6">
+        <Link
+          href="/"
+          prefetch={false}
+          className="flex items-center gap-2 text-h3 text-[#0F172A] no-underline"
+        >
           <BrandLogo className="h-7 w-7" />
-          <span className="font-semibold">Drmine AI</span>
+          <span className="font-semibold">{BRAND_NAME}</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden items-center gap-8 md:flex">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
@@ -65,20 +80,21 @@ export function Navbar() {
               </Link>
             );
           })}
+
           {authed ? (
             <>
               <button
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 className="text-[15px] font-medium text-text-secondary transition-colors hover:text-text-primary"
               >
-                退出
+                退出登录
               </button>
               <Link
                 href={accountHref}
                 prefetch={false}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef5ff] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
-                aria-label="账号设置"
-                title="账号设置"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF5FF] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
+                aria-label="账户设置"
+                title="账户设置"
               >
                 <UserRound className="h-5 w-5" />
               </Link>
@@ -95,16 +111,16 @@ export function Navbar() {
               <Link
                 href={startHref}
                 prefetch={false}
-                className="bg-brand-primary text-white px-5 py-2 rounded-apple text-[15px] font-medium hover:scale-[1.02] hover:shadow-card transition-all duration-200 no-underline"
+                className="rounded-apple bg-brand-primary px-5 py-2 text-[15px] font-medium text-white no-underline transition-all duration-200 hover:scale-[1.02] hover:shadow-card"
               >
                 开始创作
               </Link>
               <Link
                 href={accountHref}
                 prefetch={false}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef5ff] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
-                aria-label="注册账号"
-                title="注册账号"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EEF5FF] text-brand-primary no-underline transition hover:bg-brand-primary hover:text-white"
+                aria-label="注册账户"
+                title="注册账户"
               >
                 <UserRound className="h-5 w-5" />
               </Link>
@@ -113,16 +129,16 @@ export function Navbar() {
         </div>
 
         <button
-          className="md:hidden p-2 rounded-apple hover:bg-black/5 transition-colors"
-          onClick={() => setOpen(!open)}
+          className="rounded-apple p-2 transition-colors hover:bg-black/5 md:hidden"
+          onClick={() => setOpen((value) => !value)}
           aria-label="菜单"
         >
-          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </nav>
 
       {open && (
-        <div className="md:hidden glass px-6 pb-6 space-y-3 animate-fade-in-up">
+        <div className="glass animate-fade-in-up space-y-3 px-6 pb-6 md:hidden">
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
             return (
@@ -141,21 +157,22 @@ export function Navbar() {
               </Link>
             );
           })}
+
           {authed ? (
             <>
               <Link
                 href="/settings"
                 prefetch={false}
-                className="block w-full text-center bg-[#eef5ff] text-brand-primary py-3 rounded-apple text-[15px] font-medium no-underline"
+                className="rounded-apple block w-full bg-[#EEF5FF] py-3 text-center text-[15px] font-medium text-brand-primary no-underline"
                 onClick={() => setOpen(false)}
               >
-                账号设置
+                账户设置
               </Link>
               <button
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 className="block w-full py-3 text-center text-[15px] font-medium text-text-secondary"
               >
-                退出
+                退出登录
               </button>
             </>
           ) : (
@@ -171,7 +188,7 @@ export function Navbar() {
               <Link
                 href={startHref}
                 prefetch={false}
-                className="block w-full text-center bg-brand-primary text-white py-3 rounded-apple text-[15px] font-medium no-underline"
+                className="rounded-apple block w-full bg-brand-primary py-3 text-center text-[15px] font-medium text-white no-underline"
                 onClick={() => setOpen(false)}
               >
                 开始创作
@@ -179,10 +196,10 @@ export function Navbar() {
               <Link
                 href={accountHref}
                 prefetch={false}
-                className="block w-full text-center bg-[#eef5ff] text-brand-primary py-3 rounded-apple text-[15px] font-medium no-underline"
+                className="rounded-apple block w-full bg-[#EEF5FF] py-3 text-center text-[15px] font-medium text-brand-primary no-underline"
                 onClick={() => setOpen(false)}
               >
-                注册账号
+                注册账户
               </Link>
             </>
           )}

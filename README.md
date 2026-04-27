@@ -1,6 +1,6 @@
-# Drmine AI
+# Drmina AI
 
-Drmine AI is an AI image generation and canvas editing MVP for small business marketing visuals, ecommerce assets, and polished social posts.
+Drmina AI is an AI image generation and canvas editing MVP for small business marketing visuals, ecommerce assets, and polished social posts.
 
 Current capabilities:
 
@@ -62,15 +62,20 @@ OPENAI_API_KEY=your_apimart_api_key
 OPENAI_BASE_URL=https://api.apimart.ai/v1
 OPENAI_IMAGE_MODEL=gpt-image-2
 PYTHON_VERSION=3.11.9
-SECRET_KEY=replace-with-a-long-random-secret
 DATABASE_URL=sqlite+aiosqlite:///./lumina.db
 CORS_ORIGINS=http://localhost:3001
+SESSION_TTL_DAYS=30
+SESSION_TOKEN_BYTES=32
 ```
 
 Frontend:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+BACKEND_API_BASE_URL=http://localhost:8000
+SESSION_COOKIE_NAME=lumina_session
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=lax
+SESSION_COOKIE_MAX_AGE_SECONDS=2592000
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_TEMPLATE_BUCKET=lumina-templates
 ```
@@ -107,10 +112,10 @@ OPENAI_API_KEY=your_apimart_api_key
 OPENAI_BASE_URL=https://api.apimart.ai/v1
 OPENAI_IMAGE_MODEL=gpt-image-2
 PYTHON_VERSION=3.11.9
-SECRET_KEY=replace-with-a-long-random-secret
 DATABASE_URL=your_supabase_postgres_url
 CORS_ORIGINS=https://your-vercel-domain.vercel.app
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
+SESSION_TTL_DAYS=30
+SESSION_TOKEN_BYTES=32
 FREE_MONTHLY_QUOTA=10
 PRO_MONTHLY_QUOTA=500
 SUPABASE_URL=https://your-project.supabase.co
@@ -138,7 +143,11 @@ Output Directory: .next
 Vercel environment variable:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=https://your-render-api.onrender.com
+BACKEND_API_BASE_URL=https://your-render-api.onrender.com
+SESSION_COOKIE_NAME=lumina_session
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_SAMESITE=lax
+SESSION_COOKIE_MAX_AGE_SECONDS=2592000
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_TEMPLATE_BUCKET=lumina-templates
 ```
@@ -176,7 +185,8 @@ CORS_ORIGINS=https://your-vercel-domain.vercel.app
 - Test 1k / 2k / 4k options
 - Save generated images to the gallery
 - Save and restore canvas data
-- Clear `lumina_token` and confirm protected pages redirect to login
+- Refresh the page after login and confirm the session is restored automatically
+- Visit `/settings` without a valid session and confirm it redirects to `/login`
 - Confirm `/health` returns `{"status":"healthy"}`
 
 ## Production Follow-Ups

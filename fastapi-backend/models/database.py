@@ -23,6 +23,7 @@ class User(Base):
     gallery_items = relationship("GalleryItem", back_populates="user", cascade="all, delete-orphan")
     quota = relationship("Quota", back_populates="user", uselist=False, cascade="all, delete-orphan")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 
 class Canvas(Base):
@@ -81,3 +82,16 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="password_reset_tokens")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(128), unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_used_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="sessions")

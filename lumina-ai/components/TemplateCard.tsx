@@ -1,3 +1,5 @@
+"use client";
+
 import { ImageIcon } from "lucide-react";
 import { Card } from "./Card";
 
@@ -7,6 +9,7 @@ interface TemplateCardProps {
   prompt: string;
   imageUrl?: string;
   onUse?: () => void;
+  onPreview?: () => void;
 }
 
 const categoryColors: Record<string, string> = {
@@ -17,19 +20,25 @@ const categoryColors: Record<string, string> = {
   企业宣传: "from-emerald-50 to-teal-100",
 };
 
-export function TemplateCard({ category, title, prompt, imageUrl, onUse }: TemplateCardProps) {
+export function TemplateCard({ category, title, prompt, imageUrl, onUse, onPreview }: TemplateCardProps) {
   const gradientClass = categoryColors[category] || "from-gray-50 to-gray-100";
 
   return (
     <Card hover padding="sm">
       <div className={`aspect-[4/3] rounded-[12px] overflow-hidden mb-4 bg-gradient-to-br ${gradientClass}`}>
         {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+          <div className="group/image block h-full w-full">
+            <img
+              src={imageUrl}
+              alt={title}
+              onClick={() => {
+                console.log("preview image clicked", imageUrl);
+                onPreview?.();
+              }}
+              className="h-full w-full cursor-pointer object-cover transition duration-200 ease-out group-hover/image:scale-[1.03] group-hover/image:brightness-90"
+              loading="lazy"
+            />
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-black/25">
             <ImageIcon className="h-7 w-7" />

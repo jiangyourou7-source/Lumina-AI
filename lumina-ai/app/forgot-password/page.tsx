@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BRAND_NAME } from "@/lib/brand";
 import { requestPasswordReset } from "@/lib/openai-proxy";
 
 export default function ForgotPasswordPage() {
@@ -34,7 +35,7 @@ export default function ForgotPasswordPage() {
         <div className="mb-6 flex items-center gap-3">
           <BrandLogo className="h-10 w-10" />
           <div>
-            <p className="text-[13px] font-medium text-[#86868B]">Drmine AI</p>
+            <p className="text-[13px] font-medium text-[#86868B]">{BRAND_NAME}</p>
             <h1 className="text-[28px] font-semibold text-[#1D1D1F]">忘记密码</h1>
           </div>
         </div>

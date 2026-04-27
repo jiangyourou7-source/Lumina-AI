@@ -4,7 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
-import { isAuthenticated, login, register } from "@/lib/openai-proxy";
+import { BRAND_NAME, BRAND_STUDIO_NAME } from "@/lib/brand";
+import { getSession, login, register } from "@/lib/openai-proxy";
 
 type AuthMode = "login" | "register";
 
@@ -38,9 +39,13 @@ export default function LoginPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submitLabel = useMemo(() => (mode === "login" ? "登录并开始创作" : "创建账号并开始"), [mode]);
+  const submitLabel = useMemo(
+    () => (mode === "login" ? "登录并开始创作" : "创建账号并开始创作"),
+    [mode]
+  );
 
   useEffect(() => {
+    let mounted = true;
     const safeNext = getSafeNextPath();
     const params = new URLSearchParams(window.location.search);
     const requestedMode = params.get("mode");
@@ -48,9 +53,14 @@ export default function LoginPage() {
       setMode(requestedMode);
     }
     setNextPath(safeNext);
-    if (isAuthenticated()) {
-      router.replace(safeNext);
-    }
+    void getSession().then((session) => {
+      if (mounted && session) {
+        router.replace(safeNext);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -62,10 +72,10 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         await login(email.trim(), password);
-        setSuccess("登录成功，正在进入工作室");
+        setSuccess("登录成功，正在进入工作台");
       } else {
         await register(email.trim(), password, name.trim() || undefined);
-        setSuccess("注册成功，正在进入工作室");
+        setSuccess("注册成功，正在进入工作台");
       }
       router.push(nextPath);
     } catch (err) {
@@ -81,7 +91,7 @@ export default function LoginPage() {
         <div className="flex flex-col justify-center">
           <div className="mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-black/5 bg-white px-4 py-2 text-[14px] font-medium text-[#1D1D1F] shadow-sm">
             <BrandLogo className="h-5 w-5" />
-            Drmine AI 设计工作区
+            {BRAND_NAME} 设计工作台
           </div>
 
           <div className="rounded-[24px] border border-black/5 bg-white p-6 shadow-card-hover sm:p-8">
@@ -126,7 +136,7 @@ export default function LoginPage() {
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="Drmine Studio"
+                    placeholder={BRAND_STUDIO_NAME}
                     autoComplete="name"
                     className="mt-2 h-12 w-full rounded-[12px] border border-[#D1D1D6] bg-white px-4 text-[15px] outline-none transition focus:border-[#007AFF] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
                   />

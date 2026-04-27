@@ -1,38 +1,52 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import {
+  backendJson,
+  getRequestSessionToken,
+  nextJsonFromBackend,
+  unauthorizedResponse,
+} from "@/app/api/_shared/backend";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-export async function GET(req: NextRequest) {
-    try {
-        const authHeader = req.headers.get("Authorization");
-        const { searchParams } = new URL(req.url);
-        const category = searchParams.get("category");
-        const limit = searchParams.get("limit") || "20";
-        const offset = searchParams.get("offset") || "0";
-
-        const params = new URLSearchParams({ limit, offset });
-        if (category) params.append("category", category);
-
-        const headers: HeadersInit = {};
-        if (authHeader) {
-            headers["Authorization"] = authHeader;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/gallery?${params}`, {
-            headers,
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            return NextResponse.json(data, { status: response.status });
-        }
-
-        return NextResponse.json(data);
-    } catch (error) {
-        console.error("获取作品列表失败:", error);
-        return NextResponse.json(
-            { error: "获取作品列表失败" },
-            { status: 500 }
-        );
+export async function GET(request: NextRequest) {
+  try {
+    const sessionToken = getRequestSessionToken(request);
+    if (!sessionToken) {
+      return unauthorizedResponse();
     }
+
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.toString();
+    const { response, data } = await backendJson(`/api/gallery${query ? `?${query}` : ""}`, {
+      sessionToken,
+    });
+
+    return nextJsonFromBackend(response.status, data, {
+      clearSessionCookie: response.status === 401 || response.status === 403,
+    });
+  } catch (error) {
+    console.error("获取作品列表失败:", error);
+    return nextJsonFromBackend(500, { error: "获取作品列表失败" });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const sessionToken = getRequestSessionToken(request);
+    if (!sessionToken) {
+      return unauthorizedResponse();
+    }
+
+    const body = await request.json();
+    const { response, data } = await backendJson("/api/gallery", {
+      method: "POST",
+      body,
+      sessionToken,
+    });
+
+    return nextJsonFromBackend(response.status, data, {
+      clearSessionCookie: response.status === 401 || response.status === 403,
+    });
+  } catch (error) {
+    console.error("保存作品失败:", error);
+    return nextJsonFromBackend(500, { error: "保存作品失败" });
+  }
 }

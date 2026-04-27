@@ -146,7 +146,7 @@ async def main() -> int:
     load_dotenv(ROOT / "fastapi-backend" / ".env")
     load_dotenv(ROOT / "lumina-ai" / ".env.local")
 
-    parser = argparse.ArgumentParser(description="Generate Lumina template images and upload them to Supabase Storage.")
+    parser = argparse.ArgumentParser(description="Generate Drmina AI template images and upload them to Supabase Storage.")
     parser.add_argument("--force", action="store_true", help="Regenerate and overwrite existing images.")
     parser.add_argument("--limit", type=int, default=0, help="Generate only the first N templates.")
     parser.add_argument("--only", default="", help="Generate a single template by id.")

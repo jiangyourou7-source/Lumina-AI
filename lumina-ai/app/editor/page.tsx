@@ -9,36 +9,37 @@ import {
   Download,
   FolderOpen,
   Grid3X3,
+  Image as ImageIcon,
   ImagePlus,
   Layers,
   LogOut,
-  Maximize2,
   Mic,
   MousePointer2,
-  PenLine,
   Plus,
   RotateCcw,
   Save,
   Send,
   Settings2,
   Share2,
-  Square,
   Target,
   Trash2,
   Type,
   Wand2,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BRAND_NAME } from "@/lib/brand";
 import {
   CanvasData,
   getCanvas,
   getCanvasList,
-  isAuthenticated,
+  getSession,
   saveCanvas,
   updateCanvas,
 } from "@/lib/openai-proxy";
 
 const CANVAS_SIZE = 1080;
+const SNAP_TOLERANCE = 10;
+const HISTORY_LIMIT = 80;
 
 type CanvasElement =
   | {
@@ -72,6 +73,39 @@ interface CanvasDocument {
   elements: CanvasElement[];
 }
 
+interface DragState {
+  id: string;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+  snapshot: CanvasDocument;
+}
+
+interface SnapGuide {
+  orientation: "vertical" | "horizontal";
+  position: number;
+}
+
+interface HistoryState {
+  past: CanvasDocument[];
+  future: CanvasDocument[];
+}
+
+interface VerticalMatch {
+  candidate: number;
+  key: "left" | "center" | "right";
+  distance: number;
+}
+
+interface HorizontalMatch {
+  candidate: number;
+  key: "top" | "center" | "bottom";
+  distance: number;
+}
+
+type Axis = "x" | "y" | "both";
+
 const emptyDocument: CanvasDocument = {
   width: CANVAS_SIZE,
   height: CANVAS_SIZE,
@@ -95,6 +129,14 @@ const imageCountOptions = Array.from({ length: 10 }, (_, index) => index + 1);
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function cloneDoc(doc: CanvasDocument): CanvasDocument {
+  return JSON.parse(JSON.stringify(doc)) as CanvasDocument;
+}
+
+function docsEqual(a: CanvasDocument, b: CanvasDocument) {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function normalizeCanvasData(data: unknown): CanvasDocument {
@@ -127,6 +169,132 @@ async function loadImage(src: string) {
   });
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable)
+  );
+}
+
+function getLayerName(element: CanvasElement, fallbackIndex: number) {
+  if (element.type === "text") {
+    const content = element.content.trim().split("\n")[0];
+    return content ? content.slice(0, 18) : `文本图层 ${fallbackIndex}`;
+  }
+  return `图片图层 ${fallbackIndex}`;
+}
+
+function getSnappedPosition(
+  activeElement: CanvasElement,
+  nextX: number,
+  nextY: number,
+  elements: CanvasElement[],
+  activeId: string,
+  snapEnabled: boolean
+) {
+  if (!snapEnabled) {
+    return { x: nextX, y: nextY, guides: [] as SnapGuide[] };
+  }
+
+  const verticalCandidates = [
+    { position: 0, kind: "canvas" },
+    { position: CANVAS_SIZE / 2, kind: "canvas" },
+    { position: CANVAS_SIZE, kind: "canvas" },
+  ];
+
+  const horizontalCandidates = [
+    { position: 0, kind: "canvas" },
+    { position: CANVAS_SIZE / 2, kind: "canvas" },
+    { position: CANVAS_SIZE, kind: "canvas" },
+  ];
+
+  elements.forEach((element) => {
+    if (element.id === activeId) return;
+    verticalCandidates.push(
+      { position: element.x, kind: "element" },
+      { position: element.x + element.width / 2, kind: "element" },
+      { position: element.x + element.width, kind: "element" }
+    );
+    horizontalCandidates.push(
+      { position: element.y, kind: "element" },
+      { position: element.y + element.height / 2, kind: "element" },
+      { position: element.y + element.height, kind: "element" }
+    );
+  });
+
+  let bestX = nextX;
+  let bestY = nextY;
+  const guides: SnapGuide[] = [];
+
+  const movingVerticalPoints = [
+    { key: "left", value: nextX },
+    { key: "center", value: nextX + activeElement.width / 2 },
+    { key: "right", value: nextX + activeElement.width },
+  ];
+
+  const movingHorizontalPoints = [
+    { key: "top", value: nextY },
+    { key: "center", value: nextY + activeElement.height / 2 },
+    { key: "bottom", value: nextY + activeElement.height },
+  ];
+
+  let bestVerticalMatch: VerticalMatch | null = null;
+  let bestHorizontalMatch: HorizontalMatch | null = null;
+
+  for (const point of movingVerticalPoints) {
+    for (const candidate of verticalCandidates) {
+      const distance = Math.abs(candidate.position - point.value);
+      if (distance <= SNAP_TOLERANCE && (!bestVerticalMatch || distance < bestVerticalMatch.distance)) {
+        bestVerticalMatch = {
+          candidate: candidate.position,
+          key: point.key as "left" | "center" | "right",
+          distance,
+        };
+      }
+    }
+  }
+
+  for (const point of movingHorizontalPoints) {
+    for (const candidate of horizontalCandidates) {
+      const distance = Math.abs(candidate.position - point.value);
+      if (distance <= SNAP_TOLERANCE && (!bestHorizontalMatch || distance < bestHorizontalMatch.distance)) {
+        bestHorizontalMatch = {
+          candidate: candidate.position,
+          key: point.key as "top" | "center" | "bottom",
+          distance,
+        };
+      }
+    }
+  }
+
+  if (bestVerticalMatch) {
+    if (bestVerticalMatch.key === "left") bestX = bestVerticalMatch.candidate;
+    if (bestVerticalMatch.key === "center") bestX = bestVerticalMatch.candidate - activeElement.width / 2;
+    if (bestVerticalMatch.key === "right") bestX = bestVerticalMatch.candidate - activeElement.width;
+    guides.push({ orientation: "vertical", position: bestVerticalMatch.candidate });
+  }
+
+  if (bestHorizontalMatch) {
+    if (bestHorizontalMatch.key === "top") bestY = bestHorizontalMatch.candidate;
+    if (bestHorizontalMatch.key === "center") bestY = bestHorizontalMatch.candidate - activeElement.height / 2;
+    if (bestHorizontalMatch.key === "bottom") bestY = bestHorizontalMatch.candidate - activeElement.height;
+    guides.push({ orientation: "horizontal", position: bestHorizontalMatch.candidate });
+  }
+
+  return {
+    x: clamp(bestX, 0, CANVAS_SIZE - activeElement.width),
+    y: clamp(bestY, 0, CANVAS_SIZE - activeElement.height),
+    guides,
+  };
+}
+
 export default function EditorPage() {
   const router = useRouter();
   const [title, setTitle] = useState(DEFAULT_PROJECT_TITLE);
@@ -139,31 +307,59 @@ export default function EditorPage() {
   const [stageScale, setStageScale] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [layerPanelOpen, setLayerPanelOpen] = useState(true);
+  const [savedPanelOpen, setSavedPanelOpen] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const [quality, setQuality] = useState("低");
   const [ratio, setRatio] = useState("1:1");
   const [imageCount, setImageCount] = useState(1);
   const [prompt, setPrompt] = useState("");
-  const [drag, setDrag] = useState<{
-    id: string;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [history, setHistory] = useState<HistoryState>({ past: [], future: [] });
+  const [authReady, setAuthReady] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
+  const docRef = useRef(doc);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login?next=/editor");
-    }
+    docRef.current = doc;
+  }, [doc]);
+
+  useEffect(() => {
+    let mounted = true;
+    void getSession()
+      .then((session) => {
+        if (!mounted) return;
+        if (!session) {
+          router.replace("/login?next=/editor");
+          return;
+        }
+        setAuthReady(true);
+      })
+      .catch(() => {
+        if (mounted) router.replace("/login?next=/editor");
+      });
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   const activeElement = useMemo(
     () => doc.elements.find((element) => element.id === activeId) || null,
     [activeId, doc.elements]
   );
+
+  const layerItems = useMemo(
+    () => doc.elements.map((element, index) => ({ element, index })).reverse(),
+    [doc.elements]
+  );
+
+  const zoomPercent = Math.round(stageScale * 100);
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
 
   const refreshCanvasList = useCallback(async () => {
     try {
@@ -194,54 +390,228 @@ export default function EditorPage() {
   }, []);
 
   useEffect(() => {
-    if (!drag) return;
+    if (activeId && !doc.elements.some((element) => element.id === activeId)) {
+      setActiveId(null);
+    }
+  }, [activeId, doc.elements]);
 
-    const handleMove = (event: PointerEvent) => {
-      const dx = (event.clientX - drag.startX) / stageScale;
-      const dy = (event.clientY - drag.startY) / stageScale;
-      updateElement(drag.id, {
-        x: Math.max(0, Math.min(CANVAS_SIZE - 40, drag.originX + dx)),
-        y: Math.max(0, Math.min(CANVAS_SIZE - 40, drag.originY + dy)),
-      });
-    };
-
-    const handleUp = () => setDrag(null);
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
-    return () => {
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-    };
-  }, [drag, stageScale]);
-
-  function updateElement(id: string, patch: Partial<CanvasElement>) {
-    setDoc((current) => ({
-      ...current,
-      elements: current.elements.map((element) =>
-        element.id === id ? ({ ...element, ...patch } as CanvasElement) : element
-      ),
+  const pushHistorySnapshot = useCallback((snapshot: CanvasDocument) => {
+    setHistory((current) => ({
+      past: [...current.past, cloneDoc(snapshot)].slice(-HISTORY_LIMIT),
+      future: [],
     }));
-  }
+  }, []);
 
-  function addText(content = "输入文案") {
-    const element: CanvasElement = {
-      id: createId(),
-      type: "text",
-      content,
-      x: 180,
-      y: 180,
-      width: 560,
-      height: 150,
-      rotation: 0,
-      fontSize: 64,
-      color: "#1D1D1F",
-      fontWeight: 600,
-    };
-    setDoc((current) => ({ ...current, elements: [...current.elements, element] }));
-    setActiveId(element.id);
-  }
+  const applyDocChange = useCallback(
+    (updater: (current: CanvasDocument) => CanvasDocument) => {
+      setDoc((current) => {
+        const next = updater(current);
+        if (next === current) return current;
+        setHistory((historyState) => ({
+          past: [...historyState.past, cloneDoc(current)].slice(-HISTORY_LIMIT),
+          future: [],
+        }));
+        return next;
+      });
+    },
+    []
+  );
 
-  function handlePromptSend() {
+  const replaceDocument = useCallback((nextDoc: CanvasDocument, resetHistory = false) => {
+    setDoc(cloneDoc(nextDoc));
+    setSnapGuides([]);
+    if (resetHistory) {
+      setHistory({ past: [], future: [] });
+    }
+  }, []);
+
+  const updateElement = useCallback(
+    (id: string, patch: Partial<CanvasElement>, recordHistory = true) => {
+      const updater = (current: CanvasDocument) => {
+        const target = current.elements.find((element) => element.id === id);
+        if (!target) return current;
+        return {
+          ...current,
+          elements: current.elements.map((element) =>
+            element.id === id ? ({ ...element, ...patch } as CanvasElement) : element
+          ),
+        };
+      };
+
+      if (recordHistory) {
+        applyDocChange(updater);
+      } else {
+        setDoc(updater);
+      }
+    },
+    [applyDocChange]
+  );
+
+  const addText = useCallback(
+    (content = "输入文案") => {
+      const element: CanvasElement = {
+        id: createId(),
+        type: "text",
+        content,
+        x: 180,
+        y: 180,
+        width: 560,
+        height: 150,
+        rotation: 0,
+        fontSize: 64,
+        color: "#1D1D1F",
+        fontWeight: 600,
+      };
+      applyDocChange((current) => ({ ...current, elements: [...current.elements, element] }));
+      setActiveId(element.id);
+    },
+    [applyDocChange]
+  );
+
+  const addImage = useCallback(
+    (src: string) => {
+      const element: CanvasElement = {
+        id: createId(),
+        type: "image",
+        src,
+        x: 170,
+        y: 170,
+        width: 640,
+        height: 640,
+        rotation: 0,
+      };
+      applyDocChange((current) => ({ ...current, elements: [...current.elements, element] }));
+      setActiveId(element.id);
+    },
+    [applyDocChange]
+  );
+
+  const duplicateElement = useCallback(
+    (id: string) => {
+      const source = docRef.current.elements.find((element) => element.id === id);
+      if (!source) return;
+
+      const duplicated = {
+        ...source,
+        id: createId(),
+        x: clamp(source.x + 28, 0, CANVAS_SIZE - source.width),
+        y: clamp(source.y + 28, 0, CANVAS_SIZE - source.height),
+      } as CanvasElement;
+
+      applyDocChange((current) => ({ ...current, elements: [...current.elements, duplicated] }));
+      setActiveId(duplicated.id);
+      setMessage("已复制图层");
+    },
+    [applyDocChange]
+  );
+
+  const removeActiveElement = useCallback(() => {
+    if (!activeId) return;
+    applyDocChange((current) => ({
+      ...current,
+      elements: current.elements.filter((element) => element.id !== activeId),
+    }));
+    setActiveId(null);
+    setMessage("图层已删除");
+  }, [activeId, applyDocChange]);
+
+  const moveElementLayer = useCallback(
+    (id: string, delta: number) => {
+      applyDocChange((current) => {
+        const index = current.elements.findIndex((element) => element.id === id);
+        if (index === -1) return current;
+        const nextIndex = clamp(index + delta, 0, current.elements.length - 1);
+        if (nextIndex === index) return current;
+        const elements = [...current.elements];
+        const [item] = elements.splice(index, 1);
+        elements.splice(nextIndex, 0, item);
+        return { ...current, elements };
+      });
+    },
+    [applyDocChange]
+  );
+
+  const centerActiveElement = useCallback(
+    (axis: Axis) => {
+      if (!activeElement) return;
+      updateElement(
+        activeElement.id,
+        {
+          ...(axis === "x" || axis === "both"
+            ? { x: Math.round((CANVAS_SIZE - activeElement.width) / 2) }
+            : {}),
+          ...(axis === "y" || axis === "both"
+            ? { y: Math.round((CANVAS_SIZE - activeElement.height) / 2) }
+            : {}),
+        },
+        true
+      );
+      setMessage("已对齐到画布中心");
+    },
+    [activeElement, updateElement]
+  );
+
+  const nudgeActiveElement = useCallback(
+    (dx: number, dy: number) => {
+      if (!activeId) return;
+      applyDocChange((current) => {
+        const target = current.elements.find((element) => element.id === activeId);
+        if (!target) return current;
+        const nextX = clamp(target.x + dx, 0, CANVAS_SIZE - target.width);
+        const nextY = clamp(target.y + dy, 0, CANVAS_SIZE - target.height);
+        return {
+          ...current,
+          elements: current.elements.map((element) =>
+            element.id === activeId ? ({ ...element, x: nextX, y: nextY } as CanvasElement) : element
+          ),
+        };
+      });
+    },
+    [activeId, applyDocChange]
+  );
+
+  const resetCanvas = useCallback(() => {
+    setCanvasId(null);
+    setTitle(DEFAULT_PROJECT_TITLE);
+    replaceDocument(emptyDocument, true);
+    setActiveId(null);
+    setMessage("");
+    setProjectMenuOpen(false);
+  }, [replaceDocument]);
+
+  const undo = useCallback(() => {
+    if (!docRef.current || !canUndo) return;
+    setHistory((current) => {
+      if (!current.past.length) return current;
+      const previous = current.past[current.past.length - 1];
+      const currentSnapshot = cloneDoc(docRef.current);
+      setDoc(cloneDoc(previous));
+      return {
+        past: current.past.slice(0, -1),
+        future: [currentSnapshot, ...current.future].slice(0, HISTORY_LIMIT),
+      };
+    });
+    setSnapGuides([]);
+    setMessage("已撤销一步");
+  }, [canUndo]);
+
+  const redo = useCallback(() => {
+    if (!docRef.current || !canRedo) return;
+    setHistory((current) => {
+      if (!current.future.length) return current;
+      const [next, ...rest] = current.future;
+      const currentSnapshot = cloneDoc(docRef.current);
+      setDoc(cloneDoc(next));
+      return {
+        past: [...current.past, currentSnapshot].slice(-HISTORY_LIMIT),
+        future: rest,
+      };
+    });
+    setSnapGuides([]);
+    setMessage("已恢复一步");
+  }, [canRedo]);
+
+  const handlePromptSend = useCallback(() => {
     if (!prompt.trim()) {
       setMessage("输入你的想法开始创作");
       return;
@@ -249,106 +619,87 @@ export default function EditorPage() {
     addText(prompt.trim());
     setPrompt("");
     setMessage("已添加到画布");
-  }
+  }, [addText, prompt]);
 
-  function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImageUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      setMessage("图片不能超过 10MB");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (readerEvent) => {
-      const element: CanvasElement = {
-        id: createId(),
-        type: "image",
-        src: String(readerEvent.target?.result || ""),
-        x: 170,
-        y: 170,
-        width: 640,
-        height: 640,
-        rotation: 0,
-      };
-      setDoc((current) => ({ ...current, elements: [...current.elements, element] }));
-      setActiveId(element.id);
-      setMessage("图片已添加");
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
-  }
-
-  function removeActiveElement() {
-    if (!activeId) return;
-    setDoc((current) => ({
-      ...current,
-      elements: current.elements.filter((element) => element.id !== activeId),
-    }));
-    setActiveId(null);
-  }
-
-  function resetCanvas() {
-    setCanvasId(null);
-    setTitle(DEFAULT_PROJECT_TITLE);
-    setDoc(emptyDocument);
-    setActiveId(null);
-    setMessage("");
-    setProjectMenuOpen(false);
-  }
-
-  async function renderToDataUrl(maxSize = CANVAS_SIZE) {
-    const scale = maxSize / CANVAS_SIZE;
-    const canvas = document.createElement("canvas");
-    canvas.width = maxSize;
-    canvas.height = maxSize;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("无法创建画布");
-
-    context.scale(scale, scale);
-    context.fillStyle = doc.background;
-    context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-    for (const element of doc.elements) {
-      context.save();
-      context.translate(element.x + element.width / 2, element.y + element.height / 2);
-      context.rotate((element.rotation * Math.PI) / 180);
-
-      if (element.type === "image") {
-        const image = await loadImage(element.src);
-        context.drawImage(
-          image,
-          -element.width / 2,
-          -element.height / 2,
-          element.width,
-          element.height
-        );
-      } else {
-        context.fillStyle = element.color;
-        context.font = `${element.fontWeight} ${element.fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif`;
-        context.textBaseline = "top";
-        element.content.split("\n").forEach((line, index) => {
-          context.fillText(line, -element.width / 2, -element.height / 2 + index * element.fontSize * 1.25);
-        });
+      if (file.size > 10 * 1024 * 1024) {
+        setMessage("图片不能超过 10MB");
+        return;
       }
 
-      context.restore();
-    }
+      const reader = new FileReader();
+      reader.onload = (readerEvent) => {
+        addImage(String(readerEvent.target?.result || ""));
+        setMessage("图片已添加");
+      };
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    },
+    [addImage]
+  );
 
-    return canvas.toDataURL("image/png");
-  }
+  const renderToDataUrl = useCallback(
+    async (maxSize = CANVAS_SIZE) => {
+      const scale = maxSize / CANVAS_SIZE;
+      const canvas = document.createElement("canvas");
+      canvas.width = maxSize;
+      canvas.height = maxSize;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("无法创建画布");
 
-  async function handleExport() {
+      context.scale(scale, scale);
+      context.fillStyle = doc.background;
+      context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      for (const element of doc.elements) {
+        context.save();
+        context.translate(element.x + element.width / 2, element.y + element.height / 2);
+        context.rotate((element.rotation * Math.PI) / 180);
+
+        if (element.type === "image") {
+          const image = await loadImage(element.src);
+          context.drawImage(
+            image,
+            -element.width / 2,
+            -element.height / 2,
+            element.width,
+            element.height
+          );
+        } else {
+          context.fillStyle = element.color;
+          context.font = `${element.fontWeight} ${element.fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif`;
+          context.textBaseline = "top";
+          element.content.split("\n").forEach((line, index) => {
+            context.fillText(
+              line,
+              -element.width / 2,
+              -element.height / 2 + index * element.fontSize * 1.25
+            );
+          });
+        }
+
+        context.restore();
+      }
+
+      return canvas.toDataURL("image/png");
+    },
+    [doc]
+  );
+
+  const handleExport = useCallback(async () => {
     try {
       const dataUrl = await renderToDataUrl();
       downloadDataUrl(dataUrl, `${title || "lumina-canvas"}-${Date.now()}.png`);
     } catch {
       setMessage("导出失败，请确认图片可正常加载");
     }
-  }
+  }, [renderToDataUrl, title]);
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaving(true);
     setMessage("");
     try {
@@ -368,27 +719,134 @@ export default function EditorPage() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [canvasId, doc, refreshCanvasList, renderToDataUrl, title]);
 
-  async function handleLoadCanvas(id: number) {
-    try {
-      const data = await getCanvas(id);
-      setCanvasId(data.id);
-      setTitle(data.title);
-      setDoc(normalizeCanvasData(data.canvas_data));
-      setActiveId(null);
-      setMessage("画布已打开");
-      setProjectMenuOpen(false);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "打开失败");
-    }
-  }
+  const handleLoadCanvas = useCallback(
+    async (id: number) => {
+      try {
+        const data = await getCanvas(id);
+        setCanvasId(data.id);
+        setTitle(data.title);
+        replaceDocument(normalizeCanvasData(data.canvas_data), true);
+        setActiveId(null);
+        setMessage("画布已打开");
+        setProjectMenuOpen(false);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "打开失败");
+      }
+    },
+    [replaceDocument]
+  );
 
-  return (
-    <div className="h-screen overflow-hidden bg-[#f7f7f8] text-[#1d1d1f]">
+  useEffect(() => {
+    if (!drag) return;
+
+    const handleMove = (event: PointerEvent) => {
+      const active = docRef.current.elements.find((element) => element.id === drag.id);
+      if (!active) return;
+
+      const dx = (event.clientX - drag.startX) / stageScale;
+      const dy = (event.clientY - drag.startY) / stageScale;
+      const rawX = clamp(drag.originX + dx, 0, CANVAS_SIZE - active.width);
+      const rawY = clamp(drag.originY + dy, 0, CANVAS_SIZE - active.height);
+      const snapped = getSnappedPosition(active, rawX, rawY, docRef.current.elements, drag.id, snapEnabled);
+
+      setSnapGuides(snapped.guides);
+      updateElement(
+        drag.id,
+        {
+          x: snapped.x,
+          y: snapped.y,
+        },
+        false
+      );
+    };
+
+    const handleUp = () => {
+      if (!drag) return;
+      if (!docsEqual(drag.snapshot, docRef.current)) {
+        pushHistorySnapshot(drag.snapshot);
+      }
+      setDrag(null);
+      setSnapGuides([]);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [drag, pushHistorySnapshot, snapEnabled, stageScale, updateElement]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const meta = event.metaKey || event.ctrlKey;
+
+      if (meta && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      if (meta && key === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (meta && key === "s") {
+        event.preventDefault();
+        void handleSave();
+        return;
+      }
+
+      if (!meta && key === "c" && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        promptInputRef.current?.focus();
+        return;
+      }
+
+      if (isEditableTarget(event.target)) return;
+
+      if ((event.key === "Delete" || event.key === "Backspace") && activeId) {
+        event.preventDefault();
+        removeActiveElement();
+        return;
+      }
+
+      if (!activeId) return;
+
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        nudgeActiveElement(-step, 0);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        nudgeActiveElement(step, 0);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        nudgeActiveElement(0, -step);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        nudgeActiveElement(0, step);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeId, handleSave, nudgeActiveElement, redo, removeActiveElement, undo]);
+
+  return authReady ? (
+    <div className="h-screen overflow-hidden bg-[#F7F7F8] text-[#1D1D1F]">
       <header className="absolute left-0 right-[360px] top-0 z-20 flex h-12 items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <button className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1d1d1f] text-white">
+          <button className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F] text-white">
             <BrandLogo className="h-5 w-5" />
           </button>
           <input
@@ -399,7 +857,7 @@ export default function EditorPage() {
           />
           <button
             onClick={() => setProjectMenuOpen((open) => !open)}
-            className="rounded-full p-1.5 text-[#8e8e93] hover:bg-white"
+            className="rounded-full p-1.5 text-[#8E8E93] hover:bg-white"
             title="项目菜单"
           >
             <ChevronDown className="h-4 w-4" />
@@ -408,28 +866,28 @@ export default function EditorPage() {
             <div className="absolute left-14 top-11 z-40 w-[300px] rounded-[18px] border border-black/10 bg-white p-2 shadow-[0_18px_55px_rgba(0,0,0,0.16)]">
               <button
                 onClick={resetCanvas}
-                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1D1D1F] hover:bg-[#F5F5F7]"
               >
                 <Plus className="h-4 w-4" />
                 新建项目
               </button>
 
               <div className="my-2 h-px bg-black/5" />
-              <div className="px-3 pb-1 text-[12px] font-medium text-[#8e8e93]">已保存项目</div>
+              <div className="px-3 pb-1 text-[12px] font-medium text-[#8E8E93]">已保存项目</div>
               <div className="max-h-56 overflow-y-auto">
                 {canvasList.length === 0 ? (
-                  <p className="px-3 py-3 text-[13px] text-[#b3b3b8]">暂无保存项目</p>
+                  <p className="px-3 py-3 text-[13px] text-[#B3B3B8]">暂无保存项目</p>
                 ) : (
                   canvasList.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => handleLoadCanvas(item.id)}
-                      className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2.5 text-left hover:bg-[#f5f5f7] ${
-                        canvasId === item.id ? "text-[#007AFF]" : "text-[#1d1d1f]"
+                      className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2.5 text-left hover:bg-[#F5F5F7] ${
+                        canvasId === item.id ? "text-[#007AFF]" : "text-[#1D1D1F]"
                       }`}
                     >
                       <span className="truncate text-[14px]">{item.title || DEFAULT_PROJECT_TITLE}</span>
-                      <span className="ml-3 text-[12px] text-[#b3b3b8]">v{item.version}</span>
+                      <span className="ml-3 text-[12px] text-[#B3B3B8]">v{item.version}</span>
                     </button>
                   ))
                 )}
@@ -438,28 +896,28 @@ export default function EditorPage() {
               <div className="my-2 h-px bg-black/5" />
               <button
                 onClick={refreshCanvasList}
-                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1D1D1F] hover:bg-[#F5F5F7]"
               >
                 <RotateCcw className="h-4 w-4" />
                 刷新项目
               </button>
               <button
                 onClick={() => router.push("/studio")}
-                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#d70015] hover:bg-[#fff1f2]"
+                className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#D70015] hover:bg-[#FFF1F2]"
               >
                 <LogOut className="h-4 w-4" />
-                退出画布
+                返回工作台
               </button>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-[12px] text-[#8e8e93]">
-          <span>0</span>
+        <div className="flex items-center gap-3 text-[12px] text-[#8E8E93]">
+          <span>{doc.elements.length} 图层</span>
           <button
             onClick={() => router.push("/settings")}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-[#007AFF] text-white"
-            title="账号设置"
+            title="账户设置"
           >
             <Bot className="h-4 w-4" />
           </button>
@@ -467,21 +925,26 @@ export default function EditorPage() {
       </header>
 
       <main className="grid h-full grid-cols-[1fr_360px]">
-        <section className="relative min-w-0 bg-[#f4f4f5]">
+        <section className="relative min-w-0 bg-[#F4F4F5]">
           <div
             ref={stageWrapRef}
             className="absolute inset-0 flex items-center justify-center"
-            onPointerDown={() => setActiveId(null)}
+            onPointerDown={() => {
+              setActiveId(null);
+              setSnapGuides([]);
+            }}
           >
             {doc.elements.length === 0 ? (
-              <p className="select-none text-[15px] text-[#b3b3b8]">
-                输入你的想法开始创作，或按 <span className="rounded bg-white px-2 py-1 text-[#8e8e93] shadow-sm">C</span> 开始对话
+              <p className="select-none text-[15px] text-[#B3B3B8]">
+                输入你的想法开始创作，或按 <span className="rounded bg-white px-2 py-1 text-[#8E8E93] shadow-sm">C</span> 开始对话
               </p>
             ) : null}
 
             <div
               className={`relative origin-center overflow-hidden transition-shadow ${
-                doc.elements.length === 0 ? "opacity-0" : "rounded-[4px] bg-white shadow-[0_18px_70px_rgba(0,0,0,0.10)]"
+                doc.elements.length === 0
+                  ? "opacity-0"
+                  : "rounded-[4px] bg-white shadow-[0_18px_70px_rgba(0,0,0,0.10)]"
               }`}
               style={{
                 width: CANVAS_SIZE,
@@ -490,6 +953,28 @@ export default function EditorPage() {
                 background: doc.background,
               }}
             >
+              {snapGuides.map((guide, index) =>
+                guide.orientation === "vertical" ? (
+                  <div
+                    key={`v-${guide.position}-${index}`}
+                    className="pointer-events-none absolute bottom-0 top-0 bg-[#007AFF]/65"
+                    style={{
+                      left: guide.position - 0.5 / stageScale,
+                      width: 1 / stageScale,
+                    }}
+                  />
+                ) : (
+                  <div
+                    key={`h-${guide.position}-${index}`}
+                    className="pointer-events-none absolute left-0 right-0 bg-[#007AFF]/65"
+                    style={{
+                      top: guide.position - 0.5 / stageScale,
+                      height: 1 / stageScale,
+                    }}
+                  />
+                )
+              )}
+
               {doc.elements.map((element) => (
                 <div
                   key={element.id}
@@ -502,6 +987,7 @@ export default function EditorPage() {
                       startY: event.clientY,
                       originX: element.x,
                       originY: element.y,
+                      snapshot: cloneDoc(docRef.current),
                     });
                   }}
                   className="absolute cursor-move select-none"
@@ -534,37 +1020,82 @@ export default function EditorPage() {
             </div>
           </div>
 
-          <div className="absolute bottom-4 left-4 flex items-center gap-3 text-[#8e8e93]">
-            <button className="h-7 w-7 rounded-full hover:bg-white" title="状态" />
-            <Layers className="h-4 w-4" />
-            <FolderOpen className="h-4 w-4" />
-            <Grid3X3 className="h-4 w-4" />
-            <span className="ml-2 text-[12px]">100%</span>
+          <div className="absolute bottom-4 left-4 flex items-center gap-2 text-[#8E8E93]">
+            <button
+              onClick={() => setLayerPanelOpen((open) => !open)}
+              className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                layerPanelOpen ? "bg-white text-[#007AFF] shadow-sm" : "hover:bg-white"
+              }`}
+              title="切换图层面板"
+            >
+              <Layers className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setSavedPanelOpen((open) => !open)}
+              className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                savedPanelOpen ? "bg-white text-[#007AFF] shadow-sm" : "hover:bg-white"
+              }`}
+              title="切换项目面板"
+            >
+              <FolderOpen className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setSnapEnabled((open) => !open)}
+              className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                snapEnabled ? "bg-white text-[#007AFF] shadow-sm" : "hover:bg-white"
+              }`}
+              title={snapEnabled ? "关闭吸附" : "开启吸附"}
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </button>
+            <span className="ml-1 rounded-full bg-white px-2.5 py-1 text-[12px] shadow-sm">{zoomPercent}%</span>
           </div>
 
           <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-[16px] border border-black/10 bg-white/95 p-1.5 shadow-[0_10px_35px_rgba(0,0,0,0.14)] backdrop-blur">
             <ToolbarButton active icon={<MousePointer2 className="h-4 w-4" />} label="选择" />
-            <ToolbarButton icon={<Target className="h-4 w-4" />} label="定位" />
+            <ToolbarButton icon={<RotateCcw className="h-4 w-4" />} label="撤销" onClick={undo} disabled={!canUndo} />
+            <ToolbarButton
+              icon={<ArrowUp className="h-4 w-4 rotate-90" />}
+              label="重做"
+              onClick={redo}
+              disabled={!canRedo}
+            />
             <ToolbarButton icon={<ImagePlus className="h-4 w-4" />} label="图片" onClick={() => fileInputRef.current?.click()} />
-            <ToolbarButton icon={<Grid3X3 className="h-4 w-4" />} label="网格" />
-            <ToolbarButton icon={<Square className="h-4 w-4" />} label="形状" />
-            <ToolbarButton icon={<PenLine className="h-4 w-4" />} label="画笔" />
             <ToolbarButton icon={<Type className="h-4 w-4" />} label="文字" onClick={() => addText()} />
-            <ToolbarButton icon={<Maximize2 className="h-4 w-4" />} label="适应" />
-            <ToolbarButton icon={<Save className="h-4 w-4" />} label={saving ? "保存中" : "保存"} onClick={handleSave} />
-            <ToolbarButton icon={<Download className="h-4 w-4" />} label="导出" onClick={handleExport} />
+            <ToolbarButton
+              icon={<Target className="h-4 w-4" />}
+              label="居中"
+              onClick={() => centerActiveElement("both")}
+              disabled={!activeElement}
+            />
+            <ToolbarButton
+              active={snapEnabled}
+              icon={<Grid3X3 className="h-4 w-4" />}
+              label={snapEnabled ? "吸附开启" : "吸附关闭"}
+              onClick={() => setSnapEnabled((open) => !open)}
+            />
+            <ToolbarButton
+              active={layerPanelOpen}
+              icon={<Layers className="h-4 w-4" />}
+              label="图层面板"
+              onClick={() => setLayerPanelOpen((open) => !open)}
+            />
+            <ToolbarButton icon={<Save className="h-4 w-4" />} label={saving ? "保存中" : "保存"} onClick={() => void handleSave()} />
+            <ToolbarButton icon={<Download className="h-4 w-4" />} label="导出" onClick={() => void handleExport()} />
           </div>
 
           {settingsOpen && (
             <div className="absolute bottom-20 right-6 z-20 w-[310px] rounded-[18px] border border-black/10 bg-white p-4 shadow-[0_18px_55px_rgba(0,0,0,0.16)]">
               <div className="mb-4">
-                <p className="mb-2 text-[13px] font-medium text-[#3a3a3c]">质量</p>
-                <div className="grid grid-cols-4 rounded-[14px] bg-[#f5f5f7] p-1 text-[12px]">
+                <p className="mb-2 text-[13px] font-medium text-[#3A3A3C]">质量</p>
+                <div className="grid grid-cols-4 rounded-[14px] bg-[#F5F5F7] p-1 text-[12px]">
                   {["自动", "高", "中", "低"].map((item) => (
                     <button
                       key={item}
                       onClick={() => setQuality(item)}
-                      className={`h-8 rounded-[11px] ${quality === item ? "bg-white shadow-sm" : "text-[#8e8e93]"}`}
+                      className={`h-8 rounded-[11px] ${
+                        quality === item ? "bg-white shadow-sm" : "text-[#8E8E93]"
+                      }`}
                     >
                       {item}
                     </button>
@@ -573,26 +1104,26 @@ export default function EditorPage() {
               </div>
 
               <div className="mb-4">
-                <p className="mb-2 text-[13px] font-medium text-[#3a3a3c]">尺寸</p>
+                <p className="mb-2 text-[13px] font-medium text-[#3A3A3C]">尺寸</p>
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  <div className="rounded-[9px] bg-[#f5f5f7] px-3 py-2 text-[13px] text-[#3a3a3c]">W 2048</div>
-                  <span className="text-[#c7c7cc]">↔</span>
-                  <div className="rounded-[9px] bg-[#f5f5f7] px-3 py-2 text-[13px] text-[#3a3a3c]">H 2048</div>
+                  <div className="rounded-[9px] bg-[#F5F5F7] px-3 py-2 text-[13px] text-[#3A3A3C]">W 2048</div>
+                  <span className="text-[#C7C7CC]">↔</span>
+                  <div className="rounded-[9px] bg-[#F5F5F7] px-3 py-2 text-[13px] text-[#3A3A3C]">H 2048</div>
                 </div>
               </div>
 
               <div className="mb-4">
-                <p className="mb-2 text-[13px] font-medium text-[#3a3a3c]">Size</p>
+                <p className="mb-2 text-[13px] font-medium text-[#3A3A3C]">宽高比</p>
                 <div className="grid grid-cols-3 gap-2">
                   {ratioOptions.map((item) => (
                     <button
                       key={item}
                       onClick={() => setRatio(item)}
                       className={`flex h-14 flex-col items-center justify-center rounded-[10px] border text-[12px] ${
-                        ratio === item ? "border-[#d1d1d6] bg-[#f2f2f3]" : "border-[#e5e5ea] bg-white"
+                        ratio === item ? "border-[#D1D1D6] bg-[#F2F2F3]" : "border-[#E5E5EA] bg-white"
                       }`}
                     >
-                      <Square className="mb-1 h-4 w-4" />
+                      <Grid3X3 className="mb-1 h-4 w-4" />
                       {item}
                     </button>
                   ))}
@@ -600,14 +1131,14 @@ export default function EditorPage() {
               </div>
 
               <div>
-                <p className="mb-2 text-[13px] font-medium text-[#3a3a3c]">Image</p>
+                <p className="mb-2 text-[13px] font-medium text-[#3A3A3C]">候选数量</p>
                 <div className="grid grid-cols-4 gap-2">
                   {imageCountOptions.map((count) => (
                     <button
                       key={count}
                       onClick={() => setImageCount(count)}
                       className={`h-8 rounded-[9px] border text-[12px] ${
-                        imageCount === count ? "border-[#d1d1d6] bg-[#f2f2f3]" : "border-[#e5e5ea] bg-white"
+                        imageCount === count ? "border-[#D1D1D6] bg-[#F2F2F3]" : "border-[#E5E5EA] bg-white"
                       }`}
                     >
                       {count} img
@@ -629,20 +1160,20 @@ export default function EditorPage() {
 
         <aside className="relative flex h-full flex-col border-l border-black/10 bg-white">
           <div className="flex h-12 items-center justify-between border-b border-black/5 px-4">
-            <h1 className="text-[15px] font-semibold">新对话</h1>
-            <div className="flex items-center gap-2 text-[#c7c7cc]">
+            <h1 className="text-[15px] font-semibold">编辑助手</h1>
+            <div className="flex items-center gap-2 text-[#C7C7CC]">
               <Settings2 className="h-4 w-4" />
               <Share2 className="h-4 w-4" />
               <ArrowUp className="h-4 w-4" />
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col items-center justify-center px-6 pb-24 text-center">
+          <div className="flex flex-1 flex-col items-center justify-start overflow-y-auto px-6 pb-28 pt-8 text-center">
             <div className="mb-8 flex flex-col items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ff6aa2]/15 text-[#ff5f9b]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FF6AA2]/15 text-[#FF5F9B]">
                 <Wand2 className="h-5 w-5" />
               </div>
-              <p className="text-[14px] font-semibold text-[#1d1d1f]">试试这些 Drmine Skills</p>
+              <p className="text-[14px] font-semibold text-[#1D1D1F]">试试这些 {BRAND_NAME} Skills</p>
             </div>
 
             <div className="flex max-w-[280px] flex-wrap justify-center gap-2">
@@ -650,33 +1181,117 @@ export default function EditorPage() {
                 <button
                   key={skill}
                   onClick={() => setPrompt(skill)}
-                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-[13px] text-[#3a3a3c] shadow-sm transition hover:border-[#007AFF]/30 hover:text-[#007AFF]"
+                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-[13px] text-[#3A3A3C] shadow-sm transition hover:border-[#007AFF]/30 hover:text-[#007AFF]"
                 >
                   {skill}
                 </button>
               ))}
             </div>
 
-            <div className="mt-8 w-full rounded-[14px] border border-black/5 bg-[#fafafa] p-3 text-left">
-              <div className="mb-2 flex items-center justify-between text-[13px] text-[#8e8e93]">
-                <span>已保存画布</span>
-                <button onClick={refreshCanvasList} className="hover:text-[#007AFF]">刷新</button>
+            {layerPanelOpen && (
+              <div className="mt-8 w-full rounded-[14px] border border-black/5 bg-[#FAFAFA] p-3 text-left">
+                <div className="mb-2 flex items-center justify-between text-[13px] text-[#8E8E93]">
+                  <span>图层面板</span>
+                  <span>{doc.elements.length} 个</span>
+                </div>
+                <div className="max-h-48 space-y-1 overflow-y-auto">
+                  {layerItems.length === 0 ? (
+                    <p className="py-4 text-center text-[13px] text-[#B3B3B8]">还没有图层，先添加图片或文字</p>
+                  ) : (
+                    layerItems.map(({ element, index }) => {
+                      const canMoveForward = index < doc.elements.length - 1;
+                      const canMoveBackward = index > 0;
+                      return (
+                        <button
+                          key={element.id}
+                          onClick={() => setActiveId(element.id)}
+                          className={`flex w-full items-center gap-3 rounded-[10px] px-2 py-2 text-left transition ${
+                            activeId === element.id ? "bg-white shadow-sm" : "hover:bg-white"
+                          }`}
+                        >
+                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#F2F4F7] text-[#667085]">
+                            {element.type === "image" ? (
+                              <ImageIcon className="h-4 w-4" />
+                            ) : (
+                              <Type className="h-4 w-4" />
+                            )}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-medium text-[#1D1D1F]">
+                              {getLayerName(element, doc.elements.length - index)}
+                            </p>
+                            <p className="text-[12px] text-[#8E8E93]">
+                              {Math.round(element.x)}, {Math.round(element.y)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                moveElementLayer(element.id, 1);
+                              }}
+                              disabled={!canMoveForward}
+                              className="rounded-full p-1 text-[#8E8E93] hover:bg-[#F5F5F7] disabled:opacity-30"
+                              title="上移一层"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                moveElementLayer(element.id, -1);
+                              }}
+                              disabled={!canMoveBackward}
+                              className="rounded-full p-1 text-[#8E8E93] hover:bg-[#F5F5F7] disabled:opacity-30"
+                              title="下移一层"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5 rotate-180" />
+                            </button>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-              <div className="max-h-32 space-y-1 overflow-y-auto">
-                {canvasList.length === 0 ? (
-                  <p className="py-4 text-center text-[13px] text-[#b3b3b8]">暂无保存记录</p>
-                ) : (
-                  canvasList.slice(0, 4).map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleLoadCanvas(item.id)}
-                      className="flex w-full items-center justify-between rounded-[9px] px-2 py-2 text-left hover:bg-white"
-                    >
-                      <span className="truncate text-[13px] text-[#3a3a3c]">{item.title}</span>
-                      <span className="text-[12px] text-[#b3b3b8]">v{item.version}</span>
-                    </button>
-                  ))
-                )}
+            )}
+
+            {savedPanelOpen && (
+              <div className="mt-6 w-full rounded-[14px] border border-black/5 bg-[#FAFAFA] p-3 text-left">
+                <div className="mb-2 flex items-center justify-between text-[13px] text-[#8E8E93]">
+                  <span>已保存画布</span>
+                  <button onClick={refreshCanvasList} className="hover:text-[#007AFF]">刷新</button>
+                </div>
+                <div className="max-h-36 space-y-1 overflow-y-auto">
+                  {canvasList.length === 0 ? (
+                    <p className="py-4 text-center text-[13px] text-[#B3B3B8]">暂无保存记录</p>
+                  ) : (
+                    canvasList.slice(0, 6).map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleLoadCanvas(item.id)}
+                        className="flex w-full items-center justify-between rounded-[9px] px-2 py-2 text-left hover:bg-white"
+                      >
+                        <span className="truncate text-[13px] text-[#3A3A3C]">{item.title}</span>
+                        <span className="text-[12px] text-[#B3B3B8]">v{item.version}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 w-full rounded-[14px] border border-black/5 bg-[#FAFAFA] p-3 text-left">
+              <div className="mb-2 text-[13px] font-medium text-[#3A3A3C]">快捷键</div>
+              <div className="grid grid-cols-2 gap-2 text-[12px] text-[#8E8E93]">
+                <span>Ctrl/Cmd + Z</span>
+                <span>撤销</span>
+                <span>Shift + Ctrl/Cmd + Z</span>
+                <span>重做</span>
+                <span>Delete / Backspace</span>
+                <span>删除图层</span>
+                <span>方向键 / Shift + 方向键</span>
+                <span>微调 / 快速移动</span>
               </div>
             </div>
           </div>
@@ -687,12 +1302,18 @@ export default function EditorPage() {
                 element={activeElement}
                 updateElement={updateElement}
                 removeActiveElement={removeActiveElement}
+                duplicateElement={() => duplicateElement(activeElement.id)}
+                centerHorizontal={() => centerActiveElement("x")}
+                centerVertical={() => centerActiveElement("y")}
+                moveForward={() => moveElementLayer(activeElement.id, 1)}
+                moveBackward={() => moveElementLayer(activeElement.id, -1)}
               />
             )}
 
-            {message && <p className="mb-2 text-[12px] text-[#8e8e93]">{message}</p>}
+            {message && <p className="mb-2 text-[12px] text-[#8E8E93]">{message}</p>}
             <div className="rounded-[18px] border border-black/10 bg-white p-2 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
               <textarea
+                ref={promptInputRef}
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 placeholder="输入你的想法..."
@@ -702,18 +1323,18 @@ export default function EditorPage() {
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setSettingsOpen((open) => !open)}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#f5f5f7] px-3 py-2 text-[13px] text-[#3a3a3c]"
+                  className="inline-flex items-center gap-2 rounded-full bg-[#F5F5F7] px-3 py-2 text-[13px] text-[#3A3A3C]"
                 >
                   <ImagePlus className="h-4 w-4" /> 图像
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className={`h-3.5 w-3.5 transition ${settingsOpen ? "rotate-180" : ""}`} />
                 </button>
                 <div className="flex items-center gap-2">
-                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5f5f7]">
-                    <Mic className="h-4 w-4 text-[#8e8e93]" />
+                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F5F5F7]">
+                    <Mic className="h-4 w-4 text-[#8E8E93]" />
                   </button>
                   <button
                     onClick={handlePromptSend}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1d1d1f] text-white"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1D1D1F] text-white"
                   >
                     <Send className="h-4 w-4" />
                   </button>
@@ -724,6 +1345,8 @@ export default function EditorPage() {
         </aside>
       </main>
     </div>
+  ) : (
+    <div className="h-screen bg-[#F7F7F8]" />
   );
 }
 
@@ -731,20 +1354,23 @@ function ToolbarButton({
   icon,
   label,
   active,
+  disabled,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       title={label}
+      disabled={disabled}
       className={`flex h-9 w-9 items-center justify-center rounded-[10px] transition ${
-        active ? "bg-[#1d1d1f] text-white" : "text-[#5c5c60] hover:bg-[#f5f5f7]"
-      }`}
+        active ? "bg-[#1D1D1F] text-white" : "text-[#5C5C60] hover:bg-[#F5F5F7]"
+      } ${disabled ? "cursor-not-allowed opacity-35 hover:bg-transparent" : ""}`}
     >
       {icon}
     </button>
@@ -755,35 +1381,97 @@ function ActiveInspector({
   element,
   updateElement,
   removeActiveElement,
+  duplicateElement,
+  centerHorizontal,
+  centerVertical,
+  moveForward,
+  moveBackward,
 }: {
   element: CanvasElement;
-  updateElement: (id: string, patch: Partial<CanvasElement>) => void;
+  updateElement: (id: string, patch: Partial<CanvasElement>, recordHistory?: boolean) => void;
   removeActiveElement: () => void;
+  duplicateElement: () => void;
+  centerHorizontal: () => void;
+  centerVertical: () => void;
+  moveForward: () => void;
+  moveBackward: () => void;
 }) {
   return (
-    <div className="mb-3 rounded-[14px] border border-black/5 bg-[#fafafa] p-3 text-left">
+    <div className="mb-3 rounded-[14px] border border-black/5 bg-[#FAFAFA] p-3 text-left">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[13px] font-semibold text-[#1d1d1f]">选中图层</span>
-        <button onClick={removeActiveElement} className="rounded-full p-1 text-[#8e8e93] hover:bg-white">
+        <span className="text-[13px] font-semibold text-[#1D1D1F]">选中图层</span>
+        <button onClick={removeActiveElement} className="rounded-full p-1 text-[#8E8E93] hover:bg-white">
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
 
       {element.type === "text" && (
-        <textarea
-          value={element.content}
-          onChange={(event) => updateElement(element.id, { content: event.target.value })}
-          className="mb-2 min-h-[64px] w-full resize-none rounded-[10px] border border-black/10 bg-white px-3 py-2 text-[13px] outline-none"
-        />
+        <>
+          <textarea
+            value={element.content}
+            onChange={(event) => updateElement(element.id, { content: event.target.value })}
+            className="mb-2 min-h-[64px] w-full resize-none rounded-[10px] border border-black/10 bg-white px-3 py-2 text-[13px] outline-none"
+          />
+          <div className="mb-2 grid grid-cols-[1fr_auto] gap-2">
+            <MiniNumber
+              label="字"
+              value={element.fontSize}
+              min={10}
+              onChange={(value) => updateElement(element.id, { fontSize: value })}
+            />
+            <label className="text-[11px] text-[#8E8E93]">
+              色
+              <input
+                type="color"
+                value={element.color}
+                onChange={(event) => updateElement(element.id, { color: event.target.value })}
+                className="mt-1 h-8 w-full rounded-[8px] border border-black/10 bg-white p-1"
+              />
+            </label>
+          </div>
+        </>
       )}
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="mb-3 grid grid-cols-5 gap-2">
         <MiniNumber label="X" value={element.x} onChange={(value) => updateElement(element.id, { x: value })} />
         <MiniNumber label="Y" value={element.y} onChange={(value) => updateElement(element.id, { y: value })} />
-        <MiniNumber label="W" value={element.width} onChange={(value) => updateElement(element.id, { width: value })} />
-        <MiniNumber label="H" value={element.height} onChange={(value) => updateElement(element.id, { height: value })} />
+        <MiniNumber label="W" value={element.width} min={40} onChange={(value) => updateElement(element.id, { width: value })} />
+        <MiniNumber label="H" value={element.height} min={40} onChange={(value) => updateElement(element.id, { height: value })} />
+        <MiniNumber label="R" value={element.rotation} onChange={(value) => updateElement(element.id, { rotation: value })} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <InspectorActionButton label="水平居中" onClick={centerHorizontal} />
+        <InspectorActionButton label="垂直居中" onClick={centerVertical} />
+        <InspectorActionButton label="上移一层" onClick={moveForward} />
+        <InspectorActionButton label="下移一层" onClick={moveBackward} />
+        <InspectorActionButton label="复制图层" onClick={duplicateElement} />
+        <InspectorActionButton danger label="删除图层" onClick={removeActiveElement} />
       </div>
     </div>
+  );
+}
+
+function InspectorActionButton({
+  label,
+  onClick,
+  danger,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-[10px] border px-3 py-2 text-[12px] font-medium transition ${
+        danger
+          ? "border-[#FFD7D3] bg-[#FFF7F5] text-[#D70015] hover:bg-[#FFF1EF]"
+          : "border-black/5 bg-white text-[#3A3A3C] hover:bg-[#F5F5F7]"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -791,19 +1479,22 @@ function MiniNumber({
   label,
   value,
   onChange,
+  min,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  min?: number;
 }) {
   return (
-    <label className="text-[11px] text-[#8e8e93]">
+    <label className="text-[11px] text-[#8E8E93]">
       {label}
       <input
         type="number"
+        min={min}
         value={Math.round(value)}
-        onChange={(event) => onChange(Number(event.target.value) || 0)}
-        className="mt-1 h-8 w-full rounded-[8px] border border-black/10 bg-white px-2 text-[12px] text-[#1d1d1f] outline-none"
+        onChange={(event) => onChange(Math.max(min ?? Number.NEGATIVE_INFINITY, Number(event.target.value) || 0))}
+        className="mt-1 h-8 w-full rounded-[8px] border border-black/10 bg-white px-2 text-[12px] text-[#1D1D1F] outline-none"
       />
     </label>
   );
