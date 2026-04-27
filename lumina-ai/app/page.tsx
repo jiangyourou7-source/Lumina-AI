@@ -9,9 +9,9 @@ import {
   Layers3,
   PenTool,
   Search,
-  Sparkles,
   Wand2,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { isAuthenticated } from "@/lib/openai-proxy";
 
 const projectTypes = ["电商主图", "朋友圈九宫格", "餐饮海报", "品牌物料"];
@@ -33,7 +33,7 @@ const outputCards = [
 
 const featureBlocks = [
   {
-    icon: <Sparkles className="h-5 w-5" />,
+    icon: <BrandLogo className="h-6 w-6" />,
     eyebrow: "系统化出图",
     title: "从一张图，到一套品牌视觉",
     desc: "同一品牌调性下生成主图、活动图和社交媒体素材，让中小企业也能拥有稳定的视觉系统。",
@@ -68,7 +68,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-black/5 bg-white px-4 py-2 text-[14px] font-medium text-[#1D1D1F] shadow-sm">
-              <Sparkles className="h-4 w-4 text-[#007AFF]" />
+              <BrandLogo className="h-5 w-5" />
               你的 AI 设计助手
             </div>
 

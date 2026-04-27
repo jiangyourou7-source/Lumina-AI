@@ -22,13 +22,13 @@ import {
   Send,
   Settings2,
   Share2,
-  Sparkles,
   Square,
   Target,
   Trash2,
   Type,
   Wand2,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
   CanvasData,
   getCanvas,
@@ -389,7 +389,7 @@ export default function EditorPage() {
       <header className="absolute left-0 right-[360px] top-0 z-20 flex h-12 items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <button className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1d1d1f] text-white">
-            <Sparkles className="h-3.5 w-3.5" />
+            <BrandLogo className="h-5 w-5" />
           </button>
           <input
             value={title}

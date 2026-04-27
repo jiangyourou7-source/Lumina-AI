@@ -28,7 +28,6 @@ export default function TemplatesPage() {
         resolution: "1k",
         aspectRatio: "1:1",
         imageCount: 1,
-        officialFallback: true,
         referenceImage: null,
         referenceFileName: null,
       })

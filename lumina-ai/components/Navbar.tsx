@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Menu, X, Sparkles, UserRound } from "lucide-react";
+import { Menu, X, UserRound } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { isAuthenticated, logout } from "@/lib/openai-proxy";
 
 const navLinks = [
@@ -42,7 +43,7 @@ export function Navbar() {
     <header className="glass sticky top-0 z-50">
       <nav className="max-w-desktop mx-auto flex items-center justify-between px-6 h-16">
         <Link href="/" prefetch={false} className="flex items-center gap-2 text-h3 text-[#0F172A] no-underline">
-          <Sparkles className="w-6 h-6 text-brand-primary" />
+          <BrandLogo className="h-7 w-7" />
           <span className="font-semibold">Lumina AI</span>
         </Link>
 

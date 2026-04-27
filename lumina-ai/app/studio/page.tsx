@@ -3,21 +3,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Play,
   Download,
   Maximize2,
   Upload,
   Info,
-  Loader2,
   X,
   ChevronDown,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { editImage, generateImage, isAuthenticated } from "@/lib/openai-proxy";
 
 type StudioState = "idle" | "generating" | "success" | "error";
 
 const GALLERY_KEY = "lumina-gallery";
 const STORAGE_KEY = "lumina-studio-draft";
+const MODEL_API_VALUE = "gpt-image-2";
+const MODEL_DISPLAY_NAME = "GPT Image 2";
+const MAX_PROMPT_LENGTH = 3000;
 
 const resolutions = [
   { label: "1k", value: "1k" },
@@ -50,18 +52,16 @@ interface FormState {
   resolution: string;
   aspectRatio: string;
   imageCount: number;
-  officialFallback: boolean;
   referenceImage: string | null;
   referenceFileName: string | null;
 }
 
 const defaultForm: FormState = {
-  model: "gpt-image-2",
+  model: MODEL_API_VALUE,
   prompt: "",
   resolution: "1k",
   aspectRatio: "1:1",
   imageCount: 1,
-  officialFallback: false,
   referenceImage: null,
   referenceFileName: null,
 };
@@ -81,7 +81,6 @@ export default function StudioPage() {
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [generatedUrls, setGeneratedUrls] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
-  const [cost] = useState("0.006");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -95,9 +94,10 @@ export default function StudioPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.model === "gpt-image-1.5") {
+        if (parsed.model === "gpt-image-1.5" || parsed.model === MODEL_DISPLAY_NAME) {
           parsed.model = defaultForm.model;
         }
+        delete parsed.officialFallback;
         if (legacyResolutionValues.has(parsed.resolution)) {
           parsed.resolution = defaultForm.resolution;
         }
@@ -149,9 +149,8 @@ export default function StudioPage() {
         setState("error");
         return;
       }
-      const prompt = form.officialFallback
-        ? `${form.prompt}\n\n商业精修质感，适合企业宣传、电商主图和朋友圈发布。`
-        : form.prompt;
+      const prompt = form.prompt;
+      const requestModel = form.model === MODEL_DISPLAY_NAME ? MODEL_API_VALUE : form.model || MODEL_API_VALUE;
       const urls: string[] = [];
 
       for (let i = 0; i < count; i += 1) {
@@ -162,14 +161,14 @@ export default function StudioPage() {
               size,
               resolution: form.resolution,
               quality: "high",
-              model: form.model,
+              model: requestModel,
             })
           : await generateImage({
               prompt,
               size,
               resolution: form.resolution,
               quality: "high",
-              model: form.model,
+              model: requestModel,
             });
 
         urls.push(result.url);
@@ -223,20 +222,26 @@ export default function StudioPage() {
           <FormField label="模型">
             <input
               type="text"
-              value={form.model}
-              onChange={(e) => updateForm("model", e.target.value)}
-              className="form-input"
+              value={MODEL_DISPLAY_NAME}
+              readOnly
+              className="form-input bg-[#F8FAFC] text-[#0F172A]"
             />
           </FormField>
 
           <FormField label="提示词">
-            <textarea
-              value={form.prompt}
-              onChange={(e) => updateForm("prompt", e.target.value)}
-              placeholder="cute things."
-              className="form-input min-h-[120px] resize-y"
-              rows={5}
-            />
+            <div className="relative">
+              <textarea
+                value={form.prompt}
+                onChange={(e) => updateForm("prompt", e.target.value)}
+                placeholder="描述你想要生成的内容......"
+                maxLength={MAX_PROMPT_LENGTH}
+                className="form-input min-h-[120px] resize-y pb-8"
+                rows={5}
+              />
+              <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-[#94A3B8]">
+                {form.prompt.length}/{MAX_PROMPT_LENGTH}
+              </span>
+            </div>
           </FormField>
 
           <div className="flex gap-3">
@@ -287,27 +292,7 @@ export default function StudioPage() {
             />
           </FormField>
 
-          <FormField label="官方渠道兜底">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => updateForm("officialFallback", !form.officialFallback)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                  form.officialFallback ? "bg-[#2563EB]" : "bg-[#CBD5E1]"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${
-                    form.officialFallback ? "translate-x-[22px]" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-              <span className="text-[13px] text-[#64748B]">
-                {form.officialFallback ? "已开启" : "已关闭"}
-              </span>
-            </div>
-          </FormField>
-
-          <FormField label="参考图像">
+          <FormField label="上传参考图（可选）">
             <div>
               {form.referenceImage ? (
                 <div className="relative rounded-[10px] overflow-hidden border border-[#E2E8F0]">
@@ -337,7 +322,7 @@ export default function StudioPage() {
                   className="w-full py-6 border-2 border-dashed border-[#CBD5E1] rounded-[10px] hover:border-[#2563EB] hover:bg-[#EFF6FF]/50 transition-all duration-200 flex flex-col items-center justify-center gap-2"
                 >
                   <Upload className="w-6 h-6 text-[#94A3B8]" />
-                  <span className="text-[13px] text-[#64748B]">Click to upload image</span>
+                  <span className="text-[13px] text-[#64748B]">点击上传</span>
                   <span className="text-[11px] text-[#94A3B8]">PNG, JPG, WEBP · Max 10MB · 1 file</span>
                 </button>
               )}
@@ -360,19 +345,16 @@ export default function StudioPage() {
           >
             {state === "generating" ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <BrandLogo className="h-5 w-5 animate-pulse" />
                 生成中...
               </>
             ) : (
               <>
-                <Play className="w-4 h-4" />
-                Run
+                <BrandLogo className="h-5 w-5" />
+                生成
               </>
             )}
           </button>
-          <p className="text-[12px] text-[#94A3B8] text-center mt-2">
-            预计消耗 ≈ ${cost}
-          </p>
         </div>
       </div>
 
@@ -381,23 +363,20 @@ export default function StudioPage() {
           {state === "idle" && (
             <div className="text-center">
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#EFF6FF] flex items-center justify-center">
-                <Play className="w-8 h-8 text-[#2563EB]" />
+                <BrandLogo className="h-11 w-11" />
               </div>
-              <p className="text-[17px] text-[#64748B] font-medium">
-                输入提示词后点击 Run 生成
+              <p className="text-[17px] text-[#0F172A] font-medium">
+                生成
               </p>
               <p className="text-[13px] text-[#94A3B8] mt-1">
-                支持中文和英文描述
+                描述你想要生成的内容后开始创作
               </p>
             </div>
           )}
 
           {state === "generating" && (
             <div className="text-center">
-              <div className="w-20 h-20 mx-auto mb-4 relative">
-                <div className="absolute inset-0 rounded-full border-4 border-[#EFF6FF]"></div>
-                <div className="absolute inset-0 rounded-full border-4 border-[#2563EB] border-t-transparent animate-spin"></div>
-              </div>
+              <PocketToolsAnimation />
               <p className="text-[17px] text-[#0F172A] font-medium mb-1">AI 正在创作中</p>
               <p className="text-[13px] text-[#94A3B8]">通常需要 3-10 秒</p>
             </div>
@@ -470,6 +449,35 @@ export default function StudioPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PocketToolsAnimation() {
+  const tools = [
+    { label: "T", className: "left-2 top-8", delay: "0ms" },
+    { label: "#", className: "right-3 top-5", delay: "160ms" },
+    { label: "图", className: "left-8 top-0", delay: "320ms" },
+    { label: "光", className: "right-8 top-12", delay: "480ms" },
+  ];
+
+  return (
+    <div className="relative mx-auto mb-4 h-28 w-28">
+      <div className="absolute inset-x-0 bottom-2 mx-auto h-20 w-20 rounded-full bg-[#E5F2FF] blur-xl" />
+      <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-[22px] bg-white p-3 shadow-card">
+        <BrandLogo className="h-14 w-14" />
+      </div>
+      {tools.map((tool) => (
+        <span
+          key={tool.label}
+          className={`absolute z-20 flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#D7E9FF] bg-white text-[13px] font-semibold text-[#007AFF] shadow-sm animate-bounce ${tool.className}`}
+          style={{ animationDelay: tool.delay, animationDuration: "1.35s" }}
+        >
+          {tool.label}
+        </span>
+      ))}
+      <span className="absolute left-1/2 top-5 h-2 w-2 -translate-x-1/2 rounded-full bg-[#30D158] animate-pulse" />
+      <span className="absolute right-1 top-16 h-2.5 w-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Footer() {
   return (
@@ -7,7 +7,7 @@ export function Footer() {
       <div className="max-w-desktop mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-4 gap-12">
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5 text-brand-primary" />
+            <BrandLogo className="h-6 w-6" />
             <span className="font-semibold text-h3">Lumina AI</span>
           </div>
           <p className="text-caption text-text-secondary">

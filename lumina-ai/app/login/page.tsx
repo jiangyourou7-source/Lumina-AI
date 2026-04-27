@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { isAuthenticated, login, register } from "@/lib/openai-proxy";
 
 type AuthMode = "login" | "register";
@@ -79,7 +80,7 @@ export default function LoginPage() {
       <section className="mx-auto grid max-w-desktop grid-cols-1 gap-8 px-6 py-10 lg:grid-cols-[0.9fr_1.1fr] lg:py-16">
         <div className="flex flex-col justify-center">
           <div className="mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-black/5 bg-white px-4 py-2 text-[14px] font-medium text-[#1D1D1F] shadow-sm">
-            <Sparkles className="h-4 w-4 text-[#007AFF]" />
+            <BrandLogo className="h-5 w-5" />
             Lumina AI 设计工作区
           </div>
 
