@@ -454,30 +454,40 @@ export default function StudioPage() {
 }
 
 function PocketToolsAnimation() {
-  const tools = [
-    { label: "T", className: "left-2 top-8", delay: "0ms" },
-    { label: "#", className: "right-3 top-5", delay: "160ms" },
-    { label: "图", className: "left-8 top-0", delay: "320ms" },
-    { label: "光", className: "right-8 top-12", delay: "480ms" },
-  ];
+  const tools = Array.from({ length: 6 }, (_, index) => ({
+    src: `/brand-tools/tool-${index + 1}.png`,
+    angle: index * 60,
+  }));
 
   return (
-    <div className="relative mx-auto mb-4 h-28 w-28">
-      <div className="absolute inset-x-0 bottom-2 mx-auto h-20 w-20 rounded-full bg-[#E5F2FF] blur-xl" />
-      <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-[22px] bg-white p-3 shadow-card">
+    <div className="relative mx-auto mb-5 h-40 w-40">
+      <div className="absolute inset-4 rounded-full bg-[#E5F2FF] blur-2xl" />
+      <div
+        className="absolute inset-2 rounded-full border border-dashed border-[#BFE3FF]"
+        style={{ animation: "spin 9s linear infinite" }}
+      >
+        {tools.map((tool) => (
+          <div
+            key={tool.src}
+            className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[14px] border border-[#D7E9FF] bg-white shadow-sm"
+            style={{
+              transform: `translate(-50%, -50%) rotate(${tool.angle}deg) translateY(-68px) rotate(-${tool.angle}deg)`,
+            }}
+          >
+            <img
+              src={tool.src}
+              alt=""
+              className="h-9 w-9 object-contain"
+              style={{ animation: "spin 9s linear infinite reverse" }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[24px] bg-white shadow-card">
         <BrandLogo className="h-14 w-14" />
       </div>
-      {tools.map((tool) => (
-        <span
-          key={tool.label}
-          className={`absolute z-20 flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#D7E9FF] bg-white text-[13px] font-semibold text-[#007AFF] shadow-sm animate-bounce ${tool.className}`}
-          style={{ animationDelay: tool.delay, animationDuration: "1.35s" }}
-        >
-          {tool.label}
-        </span>
-      ))}
-      <span className="absolute left-1/2 top-5 h-2 w-2 -translate-x-1/2 rounded-full bg-[#30D158] animate-pulse" />
-      <span className="absolute right-1 top-16 h-2.5 w-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
+      <span className="absolute left-1/2 top-4 h-2 w-2 -translate-x-1/2 rounded-full bg-[#30D158] animate-pulse" />
+      <span className="absolute bottom-8 right-5 h-2.5 w-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
     </div>
   );
 }

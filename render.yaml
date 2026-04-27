@@ -29,6 +29,14 @@ services:
         value: lumina-templates
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "10080"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Drmine AI <onboarding@resend.dev>
+      - key: PASSWORD_RESET_BASE_URL
+        value: https://lumina-ai-two-psi.vercel.app
+      - key: PASSWORD_RESET_EXPIRE_MINUTES
+        value: "30"
       - key: FREE_MONTHLY_QUOTA
         value: "10"
       - key: PRO_MONTHLY_QUOTA

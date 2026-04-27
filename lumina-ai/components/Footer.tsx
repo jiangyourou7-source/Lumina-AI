@@ -8,7 +8,7 @@ export function Footer() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <BrandLogo className="h-6 w-6" />
-            <span className="font-semibold text-h3">Lumina AI</span>
+            <span className="font-semibold text-h3">Drmine AI</span>
           </div>
           <p className="text-caption text-text-secondary">
             专业级AI图像创作平台，让你的商业视觉脱颖而出
@@ -44,7 +44,7 @@ export function Footer() {
 
       <div className="max-w-desktop mx-auto px-6 pb-8 text-center">
         <p className="text-caption text-text-tertiary">
-          © 2026 Lumina AI. All rights reserved.
+          © 2026 Drmine AI. All rights reserved.
         </p>
       </div>
     </footer>

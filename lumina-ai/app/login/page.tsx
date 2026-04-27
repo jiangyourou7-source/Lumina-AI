@@ -81,7 +81,7 @@ export default function LoginPage() {
         <div className="flex flex-col justify-center">
           <div className="mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-black/5 bg-white px-4 py-2 text-[14px] font-medium text-[#1D1D1F] shadow-sm">
             <BrandLogo className="h-5 w-5" />
-            Lumina AI 设计工作区
+            Drmine AI 设计工作区
           </div>
 
           <div className="rounded-[24px] border border-black/5 bg-white p-6 shadow-card-hover sm:p-8">
@@ -126,7 +126,8 @@ export default function LoginPage() {
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="Lumina Studio"
+                    placeholder="Drmine Studio"
+                    autoComplete="name"
                     className="mt-2 h-12 w-full rounded-[12px] border border-[#D1D1D6] bg-white px-4 text-[15px] outline-none transition focus:border-[#007AFF] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
                   />
                 </label>
@@ -139,6 +140,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@company.com"
+                  autoComplete="email"
                   required
                   className="mt-2 h-12 w-full rounded-[12px] border border-[#D1D1D6] bg-white px-4 text-[15px] outline-none transition focus:border-[#007AFF] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
                 />
@@ -152,6 +154,7 @@ export default function LoginPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="至少 8 位"
                   minLength={8}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
                   required
                   className="mt-2 h-12 w-full rounded-[12px] border border-[#D1D1D6] bg-white px-4 text-[15px] outline-none transition focus:border-[#007AFF] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
                 />
@@ -178,6 +181,16 @@ export default function LoginPage() {
                 {!loading ? <ArrowRight className="h-4 w-4" /> : null}
               </button>
             </form>
+            {mode === "login" && (
+              <div className="mt-4 text-center">
+                <a
+                  href="/forgot-password"
+                  className="text-[14px] font-medium text-[#007AFF] no-underline hover:text-[#0067D8]"
+                >
+                  忘记密码？
+                </a>
+              </div>
+            )}
           </div>
         </div>
 

@@ -642,7 +642,7 @@ export default function EditorPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ff6aa2]/15 text-[#ff5f9b]">
                 <Wand2 className="h-5 w-5" />
               </div>
-              <p className="text-[14px] font-semibold text-[#1d1d1f]">试试这些 Lumina Skills</p>
+              <p className="text-[14px] font-semibold text-[#1d1d1f]">试试这些 Drmine Skills</p>
             </div>
 
             <div className="flex max-w-[280px] flex-wrap justify-center gap-2">

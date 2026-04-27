@@ -22,9 +22,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Lumina AI API",
+    title="Drmine AI API",
     version="1.0",
-    description="Lumina AI 智能图像创作平台后端 API",
+    description="Drmine AI 智能图像创作平台后端 API",
     lifespan=lifespan,
 )
 
@@ -45,7 +45,7 @@ app.include_router(canvas.router)
 
 @app.get("/")
 async def root():
-    return {"message": "Lumina AI API is running", "version": "1.0"}
+    return {"message": "Drmine AI API is running", "version": "1.0"}
 
 
 @app.get("/health")

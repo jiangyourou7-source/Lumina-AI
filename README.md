@@ -1,6 +1,6 @@
-# Lumina AI
+# Drmine AI
 
-Lumina AI is an AI image generation and canvas editing MVP for small business marketing visuals, ecommerce assets, and polished social posts.
+Drmine AI is an AI image generation and canvas editing MVP for small business marketing visuals, ecommerce assets, and polished social posts.
 
 Current capabilities:
 

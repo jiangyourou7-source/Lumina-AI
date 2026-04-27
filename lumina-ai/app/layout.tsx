@@ -4,8 +4,8 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "Lumina AI - 智能图像创作平台",
-  description: "使用 Lumina AI 创建专业级商业图像，支持电商、餐饮、品牌营销等多种场景",
+  title: "Drmine AI - 智能图像创作平台",
+  description: "使用 Drmine AI 创建专业级商业图像，支持电商、餐饮、品牌营销等多种场景",
 };
 
 export default function RootLayout({

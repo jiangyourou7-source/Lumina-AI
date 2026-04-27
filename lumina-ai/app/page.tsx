@@ -84,7 +84,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-8 max-w-2xl text-[19px] leading-8 text-[#86868B]">
-              Lumina AI 把生成、画布编辑和作品沉淀放在一个工作流里，帮企业主和精修朋友圈用户快速做出有质感的商业视觉。
+              Drmine AI 把生成、画布编辑和作品沉淀放在一个工作流里，帮企业主和精修朋友圈用户快速做出有质感的商业视觉。
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -159,7 +159,7 @@ function ProductPreview() {
             <div className="h-3 w-3 rounded-full bg-[#FFBD2E]" />
             <div className="h-3 w-3 rounded-full bg-[#28C840]" />
           </div>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] text-white/70">Lumina Workspace</span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] text-white/70">Drmine Workspace</span>
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">

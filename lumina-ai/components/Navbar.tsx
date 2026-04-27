@@ -44,7 +44,7 @@ export function Navbar() {
       <nav className="max-w-desktop mx-auto flex items-center justify-between px-6 h-16">
         <Link href="/" prefetch={false} className="flex items-center gap-2 text-h3 text-[#0F172A] no-underline">
           <BrandLogo className="h-7 w-7" />
-          <span className="font-semibold">Lumina AI</span>
+          <span className="font-semibold">Drmine AI</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-8">

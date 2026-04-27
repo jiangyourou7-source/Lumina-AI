@@ -173,6 +173,34 @@ export async function login(email: string, password: string): Promise<AuthResult
   return result;
 }
 
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "发送重置邮件失败"));
+  }
+
+  return response.json();
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "重置密码失败"));
+  }
+
+  return response.json();
+}
+
 export async function getUserProfile() {
   return apiJson("/api/auth/me", {}, "获取用户信息失败");
 }

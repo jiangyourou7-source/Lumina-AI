@@ -65,7 +65,7 @@ export default function SettingsPage() {
 
   const handleContactAuthor = () => {
     window.location.href =
-      "mailto:demo@lumina-mvp.com?subject=Lumina%20AI%20%E5%AE%9A%E5%88%B6%E5%85%85%E5%80%BC";
+      "mailto:demo@drmine.ai?subject=Drmine%20AI%20%E5%AE%9A%E5%88%B6%E5%85%85%E5%80%BC";
   };
 
   const planLabel = profile ? getPlanLabel(profile.user.plan || profile.quota.plan || "free") : "";
