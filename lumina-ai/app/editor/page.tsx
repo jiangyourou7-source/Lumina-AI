@@ -39,6 +39,9 @@ const CANVAS_SIZE = 1080;
 const SNAP_TOLERANCE = 10;
 const HISTORY_LIMIT = 80;
 const EDITOR_SETTINGS_SEEN_KEY = "drmine-editor-settings-seen";
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_REFERENCE_IMAGE_SIZE = 1600;
+const REFERENCE_IMAGE_QUALITY = 0.82;
 
 type CanvasElement =
   | {
@@ -324,6 +327,46 @@ function getLayerName(element: CanvasElement, fallbackIndex: number) {
 
 function getMaterialRoleLabel(role?: PortraitReferenceRole) {
   return materialRoleMap.get(role || "other")?.label || "其他";
+}
+
+function loadImageFromDataUrl(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new window.Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("图片读取失败，请换一张图片重试"));
+    image.src = dataUrl;
+  });
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("图片读取失败，请换一张图片重试"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressReferenceImage(file: File) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageFromDataUrl(dataUrl);
+  const maxSide = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  if (maxSide <= MAX_REFERENCE_IMAGE_SIZE && file.size <= 2 * 1024 * 1024) {
+    return dataUrl;
+  }
+
+  const scale = Math.min(1, MAX_REFERENCE_IMAGE_SIZE / maxSide);
+  const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+  const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("无法处理这张图片，请换一张图片重试");
+  context.fillStyle = "#FFFFFF";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", REFERENCE_IMAGE_QUALITY);
 }
 
 function buildCanvasFallbackPrompt(instruction: string) {
@@ -1014,30 +1057,34 @@ export default function EditorPage() {
   ]);
 
   const handleImageUpload = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      const file = input.files?.[0];
       if (!file) return;
 
       if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
         setMessage("仅支持 PNG、JPG、WEBP 图片");
-        event.target.value = "";
+        input.value = "";
         return;
       }
 
-      if (file.size > 10 * 1024 * 1024) {
+      if (file.size > MAX_UPLOAD_BYTES) {
         setMessage("图片不能超过 10MB");
-        event.target.value = "";
+        input.value = "";
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (readerEvent) => {
+      try {
         const role = pendingUploadRole;
-        addImage(String(readerEvent.target?.result || ""), role, getMaterialRoleLabel(role));
+        setMessage("正在处理素材...");
+        const imageUrl = await compressReferenceImage(file);
+        addImage(imageUrl, role, getMaterialRoleLabel(role));
         setMessage(`${getMaterialRoleLabel(role)}素材已添加`);
-      };
-      reader.readAsDataURL(file);
-      event.target.value = "";
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "图片处理失败，请换一张图片重试");
+      } finally {
+        input.value = "";
+      }
     },
     [addImage, pendingUploadRole]
   );
