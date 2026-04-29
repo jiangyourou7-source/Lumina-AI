@@ -9,14 +9,18 @@ from urllib.parse import urlparse
 import httpx
 from openai import APIConnectionError, APIStatusError, AuthenticationError, BadRequestError, OpenAI
 
-from core.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_IMAGE_MODEL
+from core.config import (
+    APIMART_MAX_WAIT_SECONDS,
+    APIMART_POLL_INTERVAL_SECONDS,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_IMAGE_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
-APIMART_POLL_INTERVAL_SECONDS = 4
-APIMART_MAX_WAIT_SECONDS = 180
 APIMART_4K_RATIOS = {"16:9", "9:16", "2:1", "1:2", "21:9", "9:21"}
 
 
