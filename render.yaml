@@ -38,6 +38,30 @@ services:
       - key: PASSWORD_RESET_EXPIRE_MINUTES
         value: "30"
       - key: FREE_MONTHLY_QUOTA
-        value: "10"
+        value: "5"
       - key: PRO_MONTHLY_QUOTA
         value: "500"
+      - key: VIP1_IMAGE_QUOTA
+        value: "50"
+      - key: VIP2_IMAGE_QUOTA
+        value: "100"
+      - key: VIP3_IMAGE_QUOTA
+        value: "500"
+      - key: VIP1_PRICE
+        value: "9.9"
+      - key: VIP2_PRICE
+        value: "19.9"
+      - key: VIP3_PRICE
+        value: "99.9"
+      - key: PROMO_VIP2_BONUS_QUOTA
+        value: "50"
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false
+      - key: PAYMENT_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+        value: "300"
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
