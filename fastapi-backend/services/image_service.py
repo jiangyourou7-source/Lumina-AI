@@ -211,10 +211,10 @@ async def _poll_apimart_task(http_client: httpx.AsyncClient, task_id: str) -> st
         if not isinstance(task, dict):
             raise ImageServiceError("APIMart 任务返回格式异常")
 
-        status = task.get("status")
-        if status == "completed":
+        status = str(task.get("status") or "").lower()
+        if status in {"completed", "complete", "success", "succeeded"}:
             return _extract_apimart_image_url(task)
-        if status in {"failed", "cancelled"}:
+        if status in {"failed", "fail", "cancelled", "canceled", "error"}:
             error = task.get("error") if isinstance(task.get("error"), dict) else {}
             message = error.get("message") or "图片任务失败"
             raise ImageServiceError(str(message))
@@ -264,6 +264,11 @@ def _extract_apimart_task_id(data: dict) -> str:
 
 
 def _extract_apimart_image_url(task: dict) -> str:
+    for root in (task.get("result"), task.get("output"), task.get("data"), task):
+        image_url = _find_first_image_url(root)
+        if image_url:
+            return image_url
+
     result = task.get("result") if isinstance(task.get("result"), dict) else {}
     images = result.get("images") if isinstance(result, dict) else None
     if isinstance(images, list) and images:
@@ -275,6 +280,45 @@ def _extract_apimart_image_url(task: dict) -> str:
             if isinstance(urls, str):
                 return urls
     raise ImageServiceError("APIMart 任务完成但未返回图片 URL")
+
+
+def _find_first_image_url(value) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith(("http://", "https://", "data:image/")):
+            return text
+        return None
+
+    if isinstance(value, list):
+        for item in value:
+            found = _find_first_image_url(item)
+            if found:
+                return found
+        return None
+
+    if isinstance(value, dict):
+        preferred_keys = (
+            "url",
+            "urls",
+            "image_url",
+            "image_urls",
+            "output_url",
+            "output",
+            "src",
+            "images",
+        )
+        for key in preferred_keys:
+            if key in value:
+                found = _find_first_image_url(value[key])
+                if found:
+                    return found
+
+        for item in value.values():
+            found = _find_first_image_url(item)
+            if found:
+                return found
+
+    return None
 
 
 def _to_apimart_error(status_code: int, data: dict) -> ImageServiceError:
