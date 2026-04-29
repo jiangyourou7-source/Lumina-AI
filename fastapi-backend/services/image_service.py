@@ -79,6 +79,37 @@ async def edit_image(
         raise _to_safe_image_error(e) from e
 
 
+async def compose_portrait_image(
+    image_urls: list[str],
+    prompt: str,
+    size: str = "1024x1024",
+    resolution: str = "1k",
+    quality: str = "high",
+    model: str | None = None,
+) -> str:
+    try:
+        if not image_urls:
+            raise ImageServiceError("请至少提供一张写真参考图")
+
+        if _is_apimart_base_url():
+            for image_url in image_urls:
+                await _validate_image_source(image_url)
+            return await _submit_apimart_image_task(
+                prompt=prompt,
+                size=size,
+                resolution=resolution,
+                quality=quality,
+                model=model or OPENAI_IMAGE_MODEL,
+                image_urls=image_urls,
+            )
+
+        image_bytes, mime_type = await _load_image(image_urls[0])
+        return await _edit_openai_image(image_bytes, mime_type, prompt, size, quality, model)
+    except Exception as e:
+        logger.error(f"AI 写真合成失败: {str(e)}")
+        raise _to_safe_image_error(e) from e
+
+
 async def _generate_openai_image(
     prompt: str,
     size: str,

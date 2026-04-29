@@ -20,15 +20,20 @@ export function Navbar() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     void getSession()
       .then((session) => {
-        if (mounted) setAuthed(!!session);
+        if (mounted) {
+          setAuthed(!!session);
+          setIsAdmin(session?.user?.role === "admin");
+        }
       })
       .catch(() => {
         if (mounted) setAuthed(false);
+        if (mounted) setIsAdmin(false);
       });
     setOpen(false);
     return () => {
@@ -83,6 +88,19 @@ export function Navbar() {
 
           {authed ? (
             <>
+              {isAdmin ? (
+                <Link
+                  href="/admin"
+                  prefetch={false}
+                  className={`text-[15px] transition-colors duration-200 no-underline ${
+                    pathname === "/admin"
+                      ? "text-brand-primary font-medium"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  后台
+                </Link>
+              ) : null}
               <button
                 onClick={() => void handleLogout()}
                 className="text-[15px] font-medium text-text-secondary transition-colors hover:text-text-primary"
@@ -160,6 +178,16 @@ export function Navbar() {
 
           {authed ? (
             <>
+              {isAdmin ? (
+                <Link
+                  href="/admin"
+                  prefetch={false}
+                  className="rounded-apple block w-full bg-[#EEF5FF] py-3 text-center text-[15px] font-medium text-brand-primary no-underline"
+                  onClick={() => setOpen(false)}
+                >
+                  后台管理
+                </Link>
+              ) : null}
               <Link
                 href="/settings"
                 prefetch={false}

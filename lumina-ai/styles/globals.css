@@ -210,6 +210,50 @@
   }
 }
 
+@keyframes studio-aurora-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+  35% {
+    transform: translate3d(48px, -36px, 0) scale(1.08);
+    opacity: 0.78;
+  }
+  70% {
+    transform: translate3d(-34px, 42px, 0) scale(0.94);
+    opacity: 0.62;
+  }
+}
+
+@keyframes studio-particle-float {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.8);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.9;
+  }
+  55% {
+    transform: translate3d(34px, -46px, 0) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(-18px, -92px, 0) scale(0.75);
+    opacity: 0;
+  }
+}
+
+@keyframes studio-center-pulse {
+  0%, 100% {
+    transform: scale(0.98);
+    opacity: 0.78;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.6s cubic-bezier(0.25, 0.1, 0.0, 0.98) forwards;
 }
@@ -223,3 +267,50 @@
 .stagger-3 { animation-delay: 0.3s; opacity: 0; }
 .stagger-4 { animation-delay: 0.4s; opacity: 0; }
 .stagger-5 { animation-delay: 0.5s; opacity: 0; }
+
+.studio-aurora-drift {
+  animation: studio-aurora-drift 8s ease-in-out infinite;
+}
+
+.studio-aurora-delay-1 {
+  animation-delay: -2.4s;
+}
+
+.studio-aurora-delay-2 {
+  animation-delay: -4.8s;
+}
+
+.studio-center-pulse {
+  animation: studio-center-pulse 2.8s ease-in-out infinite;
+}
+
+.studio-particle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: rgba(0, 122, 255, 0.68);
+  box-shadow:
+    0 0 18px rgba(0, 122, 255, 0.38),
+    0 0 34px rgba(125, 211, 252, 0.28);
+  animation: studio-particle-float 6.2s ease-in-out infinite;
+}
+
+.studio-particle-sm {
+  width: 6px;
+  height: 6px;
+  opacity: 0.8;
+}
+
+.studio-particle-lg {
+  width: 12px;
+  height: 12px;
+  background: rgba(147, 197, 253, 0.72);
+}
+
+.studio-particle-delay-1 { animation-delay: -0.8s; }
+.studio-particle-delay-2 { animation-delay: -1.6s; }
+.studio-particle-delay-3 { animation-delay: -2.4s; }
+.studio-particle-delay-4 { animation-delay: -3.2s; }
+.studio-particle-delay-5 { animation-delay: -4s; }
+.studio-particle-delay-6 { animation-delay: -4.8s; }

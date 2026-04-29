@@ -48,6 +48,7 @@ interface GenerateImageParams {
 interface GenerateImageResult {
   url: string;
   remaining_quota: number;
+  shouldShowPromoPopup?: boolean;
 }
 
 export async function generateImage(params: GenerateImageParams): Promise<GenerateImageResult> {
@@ -65,7 +66,8 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
       method: "POST",
       body: JSON.stringify({ prompt, size, resolution, quality, model }),
     },
-    "图片生成失败"
+    "图片生成失败",
+    false
   );
 }
 
@@ -81,6 +83,7 @@ interface EditImageParams {
 interface EditImageResult {
   url: string;
   remaining_quota: number;
+  shouldShowPromoPopup?: boolean;
 }
 
 export async function editImage(params: EditImageParams): Promise<EditImageResult> {
@@ -99,16 +102,78 @@ export async function editImage(params: EditImageParams): Promise<EditImageResul
       method: "POST",
       body: JSON.stringify({ image_url: imageUrl, prompt, size, resolution, quality, model }),
     },
-    "图片编辑失败"
+    "图片编辑失败",
+    false
+  );
+}
+
+export type PortraitReferenceRole =
+  | "person"
+  | "top"
+  | "pants"
+  | "shoes"
+  | "accessory"
+  | "background"
+  | "style"
+  | "other";
+
+export interface PortraitReference {
+  role: PortraitReferenceRole;
+  imageUrl: string;
+  label?: string;
+}
+
+interface ComposePortraitParams {
+  prompt: string;
+  references: PortraitReference[];
+  size?: string;
+  resolution?: string;
+  quality?: string;
+  model?: string;
+}
+
+export async function composePortrait(params: ComposePortraitParams): Promise<EditImageResult> {
+  const {
+    prompt,
+    references,
+    size = "1024x1024",
+    resolution = "1k",
+    quality = "high",
+    model,
+  } = params;
+
+  return apiJson<EditImageResult>(
+    "/api/portrait/compose",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        prompt,
+        references: references.map((item) => ({
+          role: item.role,
+          image_url: item.imageUrl,
+          label: item.label,
+        })),
+        size,
+        resolution,
+        quality,
+        model,
+      }),
+    },
+    "AI 写真生成失败",
+    false
   );
 }
 
 export interface UserInfo {
   id: number;
   email: string;
+  phone?: string | null;
   name: string | null;
   avatar: string | null;
   plan: string;
+  role: string;
+  vip_level?: string;
+  status?: string;
 }
 
 export interface AuthResult {
@@ -120,12 +185,57 @@ export interface SessionInfo {
   user: UserInfo;
 }
 
-export async function register(email: string, password: string, name?: string): Promise<AuthResult> {
+export interface CaptchaResult {
+  captchaId: string;
+  captchaImage: string;
+  expiresIn: number;
+}
+
+export async function getCaptcha(): Promise<CaptchaResult> {
+  const response = await fetch("/api/auth/captcha", {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "获取验证码失败"));
+  }
+
+  return response.json();
+}
+
+export async function sendEmailCode(
+  email: string,
+  scene: "register" | "reset_password"
+): Promise<{ message: string }> {
+  const response = await fetch(
+    "/api/auth/send-email-code",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ email, scene }),
+    })
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "发送邮箱验证码失败"));
+  }
+
+  return response.json();
+}
+
+export async function register(
+  email: string,
+  password: string,
+  name: string | undefined,
+  captchaId: string,
+  captchaCode: string,
+  emailCode: string
+): Promise<AuthResult> {
   const response = await fetch(
     "/api/auth/register",
     withJsonHeaders({
       method: "POST",
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, captchaId, captchaCode, emailCode }),
     })
   );
 
@@ -136,12 +246,17 @@ export async function register(email: string, password: string, name?: string): 
   return response.json();
 }
 
-export async function login(email: string, password: string): Promise<AuthResult> {
+export async function login(
+  email: string,
+  password: string,
+  captchaId: string,
+  captchaCode: string
+): Promise<AuthResult> {
   const response = await fetch(
     "/api/auth/login",
     withJsonHeaders({
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, captchaId, captchaCode }),
     })
   );
 
@@ -184,6 +299,26 @@ export async function resetPassword(token: string, newPassword: string): Promise
   return response.json();
 }
 
+export async function resetPasswordWithEmailCode(
+  email: string,
+  emailCode: string,
+  newPassword: string
+): Promise<{ message: string }> {
+  const response = await fetch(
+    "/api/auth/reset-password",
+    withJsonHeaders({
+      method: "POST",
+      body: JSON.stringify({ email, emailCode, new_password: newPassword }),
+    })
+  );
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, "重置密码失败"));
+  }
+
+  return response.json();
+}
+
 export async function getSession(): Promise<SessionInfo | null> {
   const response = await fetch("/api/auth/session", {
     credentials: "same-origin",
@@ -203,6 +338,80 @@ export async function getSession(): Promise<SessionInfo | null> {
 
 export async function getUserProfile() {
   return apiJson("/api/auth/me", {}, "获取用户信息失败", true);
+}
+
+export interface GenerationLogItem {
+  id: number;
+  createdAt: string;
+  imageCount: number;
+  successCount: number;
+  failedCount: number;
+  quotaUsed: number;
+  status: string;
+}
+
+export interface UserQuota {
+  plan: string;
+  planLabel: string;
+  imageQuotaTotal: number;
+  imageQuotaUsed: number;
+  imageQuotaRemaining: number;
+  freeGenerationCount: number;
+  promoPopupShown: boolean;
+  promoVip2Used: boolean;
+  recentGenerationLogs: GenerationLogItem[];
+}
+
+export interface PlanItem {
+  plan: "vip1" | "vip2" | "vip3";
+  name: string;
+  price: number;
+  quota: number;
+}
+
+export interface OrderResult {
+  id: number;
+  plan: string;
+  price: number;
+  baseQuota: number;
+  bonusQuota: number;
+  totalQuota: number;
+  orderType: string;
+  paymentStatus: string;
+  createdAt: string;
+  paidAt?: string | null;
+}
+
+export async function getUserQuota(): Promise<UserQuota> {
+  return apiJson<UserQuota>("/api/user/quota", {}, "获取用户额度失败", true);
+}
+
+export async function getPlans(): Promise<PlanItem[]> {
+  return apiJson<PlanItem[]>("/api/plans", {}, "获取套餐失败", false);
+}
+
+export async function markPromoPopupShown(): Promise<{ message: string }> {
+  return apiJson<{ message: string }>(
+    "/api/user/promo-popup-shown",
+    { method: "POST" },
+    "更新优惠弹窗状态失败",
+    true
+  );
+}
+
+export async function createOrder(
+  plan: "vip1" | "vip2" | "vip3",
+  orderType: "normal" | "promo_vip2" = "normal"
+): Promise<OrderResult> {
+  return apiJson<OrderResult>(
+    "/api/orders/create",
+    {
+      method: "POST",
+      body: JSON.stringify({ plan, orderType }),
+    },
+    "创建订单失败",
+    true
+  );
 }
 
 export interface GalleryItem {

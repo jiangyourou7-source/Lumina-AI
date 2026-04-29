@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, generate, edit, gallery, canvas
+from routers import admin, auth, billing, generate, edit, gallery, canvas, portrait
 from core.config import CORS_ORIGINS
 from core.database import init_db, close_db
 
@@ -37,10 +37,14 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
+app.include_router(billing.router)
 app.include_router(generate.router)
+app.include_router(generate.alias_router)
 app.include_router(edit.router)
 app.include_router(gallery.router)
 app.include_router(canvas.router)
+app.include_router(portrait.router)
 
 
 @app.get("/")

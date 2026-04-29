@@ -1,8 +1,9 @@
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import ADMIN_EMAIL, ADMIN_PHONE, ADMIN_USER_ID
 from core.database import get_db
 from models.database import User, UserSession
 from services.session_service import get_user_session
@@ -55,4 +56,30 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在",
         )
+    if getattr(session.user, "status", "active") == "disabled":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被禁用，请联系管理员。",
+        )
     return session.user
+
+
+def is_admin_user(user: User) -> bool:
+    if getattr(user, "role", "user") == "admin":
+        return True
+    if ADMIN_USER_ID and str(user.id) == ADMIN_USER_ID:
+        return True
+    if ADMIN_EMAIL and (user.email or "").lower() == ADMIN_EMAIL:
+        return True
+    if ADMIN_PHONE and getattr(user, "phone", None) == ADMIN_PHONE:
+        return True
+    return False
+
+
+async def get_current_admin_user(user: User = Depends(get_current_user)) -> User:
+    if not is_admin_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权限访问",
+        )
+    return user

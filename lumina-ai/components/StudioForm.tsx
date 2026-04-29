@@ -83,6 +83,14 @@ export function StudioForm({ onGenerate, disabled }: StudioFormProps) {
         onChange={(e) => updateField("details", e.target.value)}
         disabled={disabled}
       />
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={disabled || !data.details.trim()}
+        className="h-11 w-full rounded-[8px] bg-brand-primary text-[14px] font-medium text-white transition hover:bg-[#0066d6] disabled:opacity-50"
+      >
+        生成
+      </button>
     </div>
   );
 }

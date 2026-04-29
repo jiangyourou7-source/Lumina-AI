@@ -40,7 +40,7 @@ export function Footer() {
           <h4 className="mb-4 text-[15px] font-medium">支持</h4>
           <div className="space-y-3">
             <Link href="/forgot-password" className="block text-caption text-text-secondary no-underline hover:text-text-primary">重置密码</Link>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="block text-caption text-text-secondary no-underline hover:text-text-primary">联系作者</a>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="block text-caption text-text-secondary no-underline hover:text-text-primary">{SUPPORT_EMAIL}</a>
           </div>
         </div>
 
@@ -48,7 +48,7 @@ export function Footer() {
           <h4 className="mb-4 text-[15px] font-medium">状态</h4>
           <div className="space-y-3">
             <span className="block text-caption text-text-tertiary">MVP 持续迭代中</span>
-            <span className="block text-caption text-text-tertiary">支付与条款页尚未接入</span>
+            <span className="block text-caption text-text-tertiary">马上加入，敬请期待</span>
           </div>
         </div>
       </div>

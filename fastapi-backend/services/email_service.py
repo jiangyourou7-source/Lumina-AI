@@ -49,3 +49,43 @@ async def send_password_reset_email(email: str, reset_url: str) -> bool:
     except httpx.HTTPError as exc:
         logger.exception("Failed to send password reset email: %s", exc)
         return False
+
+
+async def send_email_verification_code(email: str, code: str, scene: str) -> bool:
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY is not configured; email verification code was not sent.")
+        return False
+
+    title = "注册 Drmina AI" if scene == "register" else "重置 Drmina AI 密码"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;color:#111827">
+      <h2>{title}</h2>
+      <p>你的邮箱验证码是：</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:6px;color:#007aff">{code}</p>
+      <p>验证码 5 分钟内有效。请勿将验证码告诉他人。</p>
+      <p style="color:#6b7280;font-size:13px">如果这不是你本人操作，可以忽略这封邮件。</p>
+    </div>
+    """
+
+    payload = {
+        "from": EMAIL_FROM,
+        "to": [email],
+        "subject": f"{title}验证码",
+        "html": html,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response.raise_for_status()
+        return True
+    except httpx.HTTPError as exc:
+        logger.exception("Failed to send email verification code: %s", exc)
+        return False

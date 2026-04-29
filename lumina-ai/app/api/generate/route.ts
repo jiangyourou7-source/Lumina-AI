@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     });
 
     return nextJsonFromBackend(response.status, data, {
-      clearSessionCookie: response.status === 401 || response.status === 403,
+      clearSessionCookie: response.status === 401,
     });
   } catch (error) {
     console.error("生成代理失败:", error);

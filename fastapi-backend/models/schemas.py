@@ -7,11 +7,16 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     name: Optional[str] = Field(default=None, max_length=100)
+    captchaId: str = Field(min_length=10, max_length=80)
+    captchaCode: str = Field(pattern=r"^\d{4,6}$")
+    emailCode: str = Field(pattern=r"^\d{6}$")
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    captchaId: str = Field(min_length=10, max_length=80)
+    captchaCode: str = Field(pattern=r"^\d{4,6}$")
 
 
 class PasswordResetRequest(BaseModel):
@@ -19,8 +24,21 @@ class PasswordResetRequest(BaseModel):
 
 
 class PasswordResetConfirm(BaseModel):
-    token: str = Field(min_length=20, max_length=256)
+    token: Optional[str] = Field(default=None, min_length=20, max_length=256)
+    email: Optional[EmailStr] = None
+    emailCode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class CaptchaResponse(BaseModel):
+    captchaId: str
+    captchaImage: str
+    expiresIn: int
+
+
+class EmailCodeRequest(BaseModel):
+    email: EmailStr
+    scene: Literal["register", "reset_password"]
 
 
 class AuthResponse(BaseModel):
@@ -34,9 +52,13 @@ class SessionAuthResponse(AuthResponse):
 class UserInfo(BaseModel):
     id: int
     email: str
+    phone: Optional[str] = None
     name: Optional[str] = None
     avatar: Optional[str] = None
     plan: str = "free"
+    role: str = "user"
+    vip_level: str = "normal"
+    status: str = "active"
 
     class Config:
         from_attributes = True
@@ -52,6 +74,123 @@ class QuotaInfo(BaseModel):
     used: int
     remaining: int
     plan: str
+
+
+class GenerationLogItem(BaseModel):
+    id: int
+    createdAt: datetime
+    imageCount: int
+    successCount: int
+    failedCount: int
+    quotaUsed: int
+    status: str
+
+
+class UserQuotaResponse(BaseModel):
+    plan: str
+    planLabel: str
+    imageQuotaTotal: int
+    imageQuotaUsed: int
+    imageQuotaRemaining: int
+    freeGenerationCount: int
+    promoPopupShown: bool
+    promoVip2Used: bool
+    recentGenerationLogs: list[GenerationLogItem] = []
+
+
+class PlanItem(BaseModel):
+    plan: Literal["vip1", "vip2", "vip3"]
+    name: str
+    price: float
+    quota: int
+
+
+class OrderCreateRequest(BaseModel):
+    plan: Literal["vip1", "vip2", "vip3"]
+    orderType: Literal["normal", "promo_vip2"] = "normal"
+
+
+class OrderPaymentCallbackRequest(BaseModel):
+    orderId: int
+    paymentStatus: Literal["paid", "failed", "cancelled"] = "paid"
+    timestamp: Optional[int] = None
+    signature: Optional[str] = Field(default=None, max_length=256)
+
+
+class OrderResponse(BaseModel):
+    id: int
+    plan: str
+    price: float
+    baseQuota: int
+    bonusQuota: int
+    totalQuota: int
+    orderType: str
+    paymentStatus: str
+    createdAt: datetime
+    paidAt: Optional[datetime] = None
+
+
+class AdminStatsResponse(BaseModel):
+    totalUsers: int
+    todayNewUsers: int
+    last7DaysNewUsers: int
+    last30DaysNewUsers: int
+    totalAccounts: int
+    activeAccounts: int
+    disabledAccounts: int
+    vipAccounts: int
+    totalImageGenerations: int
+    todayImageGenerations: int
+    last7DaysImageGenerations: int
+    last30DaysImageGenerations: int
+    registrationTrend: list[dict]
+    generationTrend: list[dict]
+
+
+class AdminUserItem(BaseModel):
+    id: int
+    email: str
+    phone: Optional[str] = None
+    nickname: Optional[str] = None
+    avatar: Optional[str] = None
+    role: str
+    vip_level: str
+    image_quota_total: int
+    image_quota_used: int
+    image_quota_remaining: int
+    status: str
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+
+
+class AdminUsersResponse(BaseModel):
+    items: list[AdminUserItem]
+    total: int
+    page: int
+    pageSize: int
+
+
+class AdminVipLevelUpdate(BaseModel):
+    vipLevel: Literal["vip1", "vip2", "vip3"]
+
+
+class AdminGenerationLogItem(BaseModel):
+    id: int
+    user_id: int
+    prompt: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    quality: Optional[str] = None
+    image_count: int
+    success_count: int = 0
+    failed_count: int = 0
+    status: str
+    quota_used: int
+    created_at: datetime
+
+
+class AdminGenerationLogsResponse(BaseModel):
+    items: list[AdminGenerationLogItem]
+    total: int
 
 
 ImageSize = Literal[
@@ -88,6 +227,7 @@ class GenerateRequest(BaseModel):
 class GenerateResponse(BaseModel):
     url: str
     remaining_quota: int
+    shouldShowPromoPopup: bool = False
 
 
 class EditRequest(BaseModel):
@@ -102,6 +242,33 @@ class EditRequest(BaseModel):
 class EditResponse(BaseModel):
     url: str
     remaining_quota: int
+
+
+PortraitReferenceRole = Literal[
+    "person",
+    "top",
+    "pants",
+    "shoes",
+    "accessory",
+    "background",
+    "style",
+    "other",
+]
+
+
+class PortraitReference(BaseModel):
+    role: PortraitReferenceRole = "other"
+    image_url: str = Field(min_length=1, max_length=15_000_000)
+    label: Optional[str] = Field(default=None, max_length=80)
+
+
+class PortraitComposeRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    references: list[PortraitReference] = Field(min_length=1, max_length=12)
+    size: ImageSize = "1024x1024"
+    resolution: ImageResolution = "1k"
+    quality: Literal["standard", "low", "medium", "high", "auto"] = "high"
+    model: Optional[str] = Field(default=None, max_length=80)
 
 
 class GalleryItemCreate(BaseModel):
