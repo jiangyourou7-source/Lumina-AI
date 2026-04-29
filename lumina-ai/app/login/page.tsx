@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { BRAND_NAME, BRAND_STUDIO_NAME } from "@/lib/brand";
-import { getCaptcha, getSession, login, register, sendEmailCode } from "@/lib/openai-proxy";
+import { getCaptcha, getSession, login, register } from "@/lib/openai-proxy";
 
 type AuthMode = "login" | "register";
 
@@ -39,9 +39,6 @@ export default function LoginPage() {
   const [captchaId, setCaptchaId] = useState("");
   const [captchaImage, setCaptchaImage] = useState("");
   const [captchaCode, setCaptchaCode] = useState("");
-  const [emailCode, setEmailCode] = useState("");
-  const [emailCooldown, setEmailCooldown] = useState(0);
-  const [emailSending, setEmailSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,31 +80,6 @@ export default function LoginPage() {
     };
   }, [router]);
 
-  useEffect(() => {
-    if (emailCooldown <= 0) return;
-    const timer = window.setTimeout(() => setEmailCooldown((value) => value - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [emailCooldown]);
-
-  async function handleSendEmailCode() {
-    setError("");
-    setSuccess("");
-    if (!email.trim()) {
-      setError("请先输入邮箱。");
-      return;
-    }
-    setEmailSending(true);
-    try {
-      const result = await sendEmailCode(email.trim(), "register");
-      setSuccess(result.message || "邮箱验证码已发送。");
-      setEmailCooldown(60);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "邮箱验证码发送失败");
-    } finally {
-      setEmailSending(false);
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -123,10 +95,6 @@ export default function LoginPage() {
         setError("两次输入的密码不一致。");
         return;
       }
-      if (emailCode.length !== 6) {
-        setError("请输入 6 位邮箱验证码。");
-        return;
-      }
     }
 
     setLoading(true);
@@ -136,11 +104,10 @@ export default function LoginPage() {
         setLoginFailures(0);
         setSuccess("登录成功，正在进入工作台");
       } else {
-        await register(email.trim(), password, name.trim() || undefined, captchaId, captchaCode, emailCode);
+        await register(email.trim(), password, name.trim() || undefined, captchaId, captchaCode);
         setSuccess("注册成功，正在进入工作台");
       }
       setCaptchaCode("");
-      setEmailCode("");
       router.push(nextPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : "认证失败，请稍后重试";
@@ -161,7 +128,6 @@ export default function LoginPage() {
     setSuccess("");
     setPassword("");
     setConfirmPassword("");
-    setEmailCode("");
     void refreshCaptcha();
   }
 
@@ -281,30 +247,6 @@ export default function LoginPage() {
                   <RefreshCw className="h-4 w-4" />
                 </button>
               </div>
-
-              {mode === "register" && (
-                <div className="grid grid-cols-[1fr_auto] gap-3">
-                  <label className="block text-[14px] font-medium text-[#1D1D1F]">
-                    邮箱验证码
-                    <input
-                      value={emailCode}
-                      onChange={(event) => setEmailCode(onlyDigits(event.target.value, 6))}
-                      inputMode="numeric"
-                      placeholder="6 位数字"
-                      required
-                      className="mt-2 h-12 w-full rounded-[12px] border border-[#D1D1D6] bg-white px-4 text-[15px] outline-none transition focus:border-[#007AFF] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void handleSendEmailCode()}
-                    disabled={emailSending || emailCooldown > 0}
-                    className="mt-7 h-12 w-[142px] rounded-[12px] border border-[#007AFF]/25 bg-[#EFF6FF] px-3 text-[13px] font-semibold text-[#007AFF] transition hover:bg-[#E5F2FF] disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    {emailSending ? "发送中..." : emailCooldown > 0 ? `${emailCooldown} 秒后重发` : "获取邮箱验证码"}
-                  </button>
-                </div>
-              )}
 
               {error && (
                 <div className="rounded-[12px] border border-[#FF3B30]/20 bg-[#FF3B30]/5 px-4 py-3 text-[14px] text-[#B42318]">

@@ -1255,7 +1255,7 @@ export default function EditorPage() {
         }`}
       >
         <div className="flex items-center gap-3">
-          <button className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1D1D1F] text-white">
+          <button className="flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white shadow-sm">
             <BrandLogo className="h-5 w-5" />
           </button>
           <input
@@ -1743,20 +1743,17 @@ export default function EditorPage() {
                   onClick={toggleSettingsPanel}
                   className="inline-flex items-center gap-2 rounded-full bg-[#F5F5F7] px-3 py-2 text-[13px] text-[#3A3A3C]"
                 >
-                  <ImagePlus className="h-4 w-4" /> 生成设置
+                  <ImagePlus className="h-4 w-4" /> 设置
                   <ChevronDown className={`h-3.5 w-3.5 transition ${settingsOpen ? "rotate-180" : ""}`} />
                 </button>
                 <div className="flex items-center gap-2">
-                  <span className="hidden rounded-full bg-[#F5F5F7] px-3 py-2 text-[12px] text-[#6B7280] sm:inline-flex">
-                    剩余额度 {quota ? `${quota.remaining}/${quota.total}` : "--"}
-                  </span>
                   <button
                     onClick={handlePromptSend}
                     disabled={aiProcessing || (!!quota && quota.remaining <= 0)}
                     className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-[#1D1D1F] px-4 text-[13px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {aiProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    生成写真
+                    生成
                   </button>
                 </div>
               </div>

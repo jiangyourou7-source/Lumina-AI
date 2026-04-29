@@ -9,7 +9,6 @@ class UserCreate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=100)
     captchaId: str = Field(min_length=10, max_length=80)
     captchaCode: str = Field(pattern=r"^\d{4,6}$")
-    emailCode: str = Field(pattern=r"^\d{6}$")
 
 
 class UserLogin(BaseModel):

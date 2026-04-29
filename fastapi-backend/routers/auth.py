@@ -121,7 +121,6 @@ def user_info(user: User) -> UserInfo:
 @router.post("/register", response_model=SessionAuthResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     await verify_captcha(db, user_data.captchaId, user_data.captchaCode)
-    await verify_email_code(db, user_data.email, "register", user_data.emailCode)
 
     result = await db.execute(select(User).where(User.email == user_data.email))
     existing = result.scalar_one_or_none()
@@ -198,8 +197,11 @@ async def send_auth_email_code(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    await send_email_code(db, request, payload.email, payload.scene)
-    return MessageResponse(message=EMAIL_CODE_SENT_MESSAGE)
+    dev_code = await send_email_code(db, request, payload.email, payload.scene)
+    message = EMAIL_CODE_SENT_MESSAGE
+    if dev_code:
+        message = f"{message} 本地开发验证码：{dev_code}"
+    return MessageResponse(message=message)
 
 
 @router.post("/logout", response_model=MessageResponse)

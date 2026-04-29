@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
-  Clock3,
   Image,
   Layers3,
   PenTool,
@@ -64,29 +63,6 @@ const featurePillars = [
   },
 ];
 
-const workflowSteps = [
-  {
-    step: "01",
-    title: "输入业务 brief",
-    desc: "产品、场景、卖点、渠道一次说清楚。",
-  },
-  {
-    step: "02",
-    title: "挑方向与比例",
-    desc: "按场景切换画幅、分辨率和参考图。",
-  },
-  {
-    step: "03",
-    title: "筛结果并精修",
-    desc: "留下最能打的一张，再进画布完成细节。",
-  },
-  {
-    step: "04",
-    title: "归档到作品库",
-    desc: "让团队后续还能继续复用同一批资产。",
-  },
-];
-
 const useCases = [
   {
     title: "电商上新",
@@ -107,24 +83,6 @@ const useCases = [
     title: "企业宣传",
     desc: "适合招聘海报、企业文化页、发布会预告和内部宣传图。",
     deliverables: ["招聘海报", "文化页", "发布会预告"],
-  },
-];
-
-const proofCards = [
-  {
-    title: "模板库已经成型",
-    desc: "50 套模板覆盖电商、餐饮、品牌、节日和企业宣传，不是只有一个空输入框。",
-    icon: Wand2,
-  },
-  {
-    title: "账号链路基础可用",
-    desc: "登录、注册、忘记密码、重置密码和配额展示都已经接好了基础流程。",
-    icon: CheckCircle2,
-  },
-  {
-    title: "生成后可继续编辑",
-    desc: "工作台不是单向出图页，当前已经能把结果继续带进画布与作品库。",
-    icon: Layers3,
   },
 ];
 
@@ -220,7 +178,6 @@ export default function LandingPage() {
         <SectionHeader
           eyebrow="核心能力"
           title="不是只有一个 prompt 输入框，而是一套能继续推进的流程"
-          desc="当前公开区先把产品价值讲清楚，再把工作台、模板和作品库串起来，方便后续继续往深功能演进。"
         />
 
         <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -247,53 +204,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-desktop px-6 py-20">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div>
-            <SectionHeader
-              eyebrow="工作流"
-              title="先把能演示、能讲清、能交付的主链路做扎实"
-              desc="这一版优先优化的是公开落地页和用户对产品能力的理解成本，让后续深入编辑器时，产品外壳已经够完整。"
-            />
-
-            <div className="mt-8 rounded-[28px] border border-black/5 bg-white p-6 shadow-card">
-              <div className="flex items-center gap-3 text-[#0F172A]">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#E9F4FF] text-[#007AFF]">
-                  <Clock3 className="h-4 w-4" />
-                </span>
-                <div>
-                  <p className="text-[17px] font-semibold">当前推进策略</p>
-                  <p className="text-[14px] text-[#667085]">先优化首页和公开区，再继续深入编辑器真实功能。</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {workflowSteps.map((item) => (
-              <div
-                key={item.step}
-                className="rounded-[24px] border border-black/5 bg-white p-6 shadow-card"
-              >
-                <div className="inline-flex rounded-full bg-[#F5F7FB] px-3 py-1 text-[12px] font-semibold text-[#007AFF]">
-                  {item.step}
-                </div>
-                <h3 className="mt-4 text-[20px] font-semibold text-[#0F172A]">{item.title}</h3>
-                <p className="mt-3 text-[15px] leading-7 text-[#667085]">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-desktop px-6 py-20">
-        <SectionHeader
-          eyebrow="适用场景"
-          title="先服务最容易验证价值的商业视觉场景"
-          desc="产品定位目前非常清楚：优先面向有明确出图需求、又不想在多个工具之间来回切换的小团队。"
-        />
-
-        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-4">
+      <section className="mx-auto max-w-desktop px-6 py-16">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
           {useCases.map((item) => (
             <article
               key={item.title}
@@ -319,75 +231,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-desktop px-6 py-20">
-        <div className="rounded-[36px] border border-black/5 bg-white p-8 shadow-card lg:p-10">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-            <div>
-              <SectionHeader
-                eyebrow="为什么现在值得继续做"
-                title="这个项目已经不是空壳，而是有清晰方向的 MVP"
-                desc="前后端、账户、配额、模板、生成、编辑、作品沉淀都已经有落点。接下来的关键，不是再加散功能，而是把用户第一眼看到的价值面做完整。"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              {proofCards.map((card) => {
-                const Icon = card.icon;
-                return (
-                  <div
-                    key={card.title}
-                    className="rounded-[24px] border border-black/5 bg-[#F8FAFD] p-5"
-                  >
-                    <div className="flex items-start gap-4">
-                      <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-white text-[#007AFF] shadow-sm">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <div>
-                        <h3 className="text-[18px] font-semibold text-[#0F172A]">{card.title}</h3>
-                        <p className="mt-2 text-[14px] leading-7 text-[#667085]">{card.desc}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-desktop px-6 pb-24 pt-8">
-        <div className="relative overflow-hidden rounded-[36px] bg-[#0F172A] px-8 py-10 text-white shadow-[0_28px_80px_rgba(15,23,42,0.22)] lg:px-12 lg:py-14">
-          <div className="pointer-events-none absolute -right-12 top-0 h-40 w-40 rounded-full bg-[#007AFF]/25 blur-3xl" />
-          <div className="pointer-events-none absolute bottom-0 left-0 h-36 w-36 rounded-full bg-[#FF9500]/15 blur-3xl" />
-
-          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[#8EC5FF]">Next Step</p>
-              <h2 className="mt-4 text-[34px] font-semibold leading-tight sm:text-[44px]">
-                先把首页和公开价值面打磨到可演示，再继续深挖编辑器能力
-              </h2>
-              <p className="mt-4 max-w-2xl text-[16px] leading-8 text-white/72">
-                这次先解决用户第一眼看到的内容质量。下一批继续进入编辑器真功能、账号链路和生产化细节。
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                href={studioHref}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-[14px] bg-white px-6 text-[15px] font-semibold text-[#0F172A] no-underline transition hover:bg-[#F2F6FC] active:scale-[0.98]"
-              >
-                开始创作 <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href={galleryHref}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-[14px] border border-white/15 bg-white/5 px-6 text-[15px] font-semibold text-white no-underline transition hover:bg-white/10 active:scale-[0.98]"
-              >
-                查看作品库
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
@@ -509,7 +352,7 @@ function SectionHeader({
 }: {
   eyebrow: string;
   title: string;
-  desc: string;
+  desc?: string;
 }) {
   return (
     <div className="max-w-3xl">
@@ -517,7 +360,7 @@ function SectionHeader({
       <h2 className="mt-3 text-[34px] font-semibold leading-tight tracking-[-0.03em] text-[#0F172A] sm:text-[44px]">
         {title}
       </h2>
-      <p className="mt-4 text-[17px] leading-8 text-[#667085]">{desc}</p>
+      {desc ? <p className="mt-4 text-[17px] leading-8 text-[#667085]">{desc}</p> : null}
     </div>
   );
 }

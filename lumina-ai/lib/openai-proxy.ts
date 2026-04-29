@@ -182,7 +182,7 @@ export interface AuthResult {
 
 export interface SessionInfo {
   authenticated: boolean;
-  user: UserInfo;
+  user: UserInfo | null;
 }
 
 export interface CaptchaResult {
@@ -228,14 +228,13 @@ export async function register(
   password: string,
   name: string | undefined,
   captchaId: string,
-  captchaCode: string,
-  emailCode: string
+  captchaCode: string
 ): Promise<AuthResult> {
   const response = await fetch(
     "/api/auth/register",
     withJsonHeaders({
       method: "POST",
-      body: JSON.stringify({ email, password, name, captchaId, captchaCode, emailCode }),
+      body: JSON.stringify({ email, password, name, captchaId, captchaCode }),
     })
   );
 
@@ -333,7 +332,8 @@ export async function getSession(): Promise<SessionInfo | null> {
     throw new Error(await parseError(response, "获取会话失败"));
   }
 
-  return response.json();
+  const data = (await response.json()) as SessionInfo;
+  return data.authenticated ? data : null;
 }
 
 export async function getUserProfile() {

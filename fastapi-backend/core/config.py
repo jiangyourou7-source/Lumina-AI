@@ -12,6 +12,7 @@ SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "30"))
 SESSION_TOKEN_BYTES = int(os.getenv("SESSION_TOKEN_BYTES", "32"))
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "Drmina AI <onboarding@resend.dev>")
+EMAIL_CODE_DEV_MODE = os.getenv("EMAIL_CODE_DEV_MODE", "false").lower() == "true"
 PASSWORD_RESET_BASE_URL = os.getenv("PASSWORD_RESET_BASE_URL", "http://localhost:3001")
 PASSWORD_RESET_EXPIRE_MINUTES = int(os.getenv("PASSWORD_RESET_EXPIRE_MINUTES", "30"))
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./lumina.db")

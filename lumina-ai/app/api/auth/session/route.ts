@@ -3,14 +3,13 @@ import {
   backendJson,
   getRequestSessionToken,
   nextJsonFromBackend,
-  unauthorizedResponse,
 } from "@/app/api/_shared/backend";
 
 export async function GET(request: NextRequest) {
   try {
     const sessionToken = getRequestSessionToken(request);
     if (!sessionToken) {
-      return unauthorizedResponse();
+      return nextJsonFromBackend(200, { authenticated: false, user: null });
     }
 
     const { response, data } = await backendJson("/api/auth/me", {
@@ -18,6 +17,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        return nextJsonFromBackend(200, { authenticated: false, user: null }, {
+          clearSessionCookie: true,
+        });
+      }
       return nextJsonFromBackend(response.status, data, {
         clearSessionCookie: response.status === 401 || response.status === 403,
       });

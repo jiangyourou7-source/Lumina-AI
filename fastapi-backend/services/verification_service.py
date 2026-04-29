@@ -8,7 +8,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import SESSION_TOKEN_BYTES
+from core.config import EMAIL_CODE_DEV_MODE, SESSION_TOKEN_BYTES
 from models.database import CaptchaChallenge, EmailVerificationCode
 from services.email_service import send_email_verification_code
 
@@ -96,7 +96,7 @@ async def verify_captcha(db: AsyncSession, captcha_id: str, code: str, *, consum
     await db.commit()
 
 
-async def send_email_code(db: AsyncSession, request: Request, email: str, scene: str) -> None:
+async def send_email_code(db: AsyncSession, request: Request, email: str, scene: str) -> str | None:
     normalized_email = email.strip().lower()
     now = utcnow()
     ip = client_ip(request)
@@ -139,7 +139,8 @@ async def send_email_code(db: AsyncSession, request: Request, email: str, scene:
     code = f"{secrets.randbelow(1000000):06d}"
     sent = await send_email_verification_code(normalized_email, code, scene)
     if not sent:
-        raise HTTPException(status_code=503, detail="邮件服务未配置或发送失败，请稍后再试。")
+        if not EMAIL_CODE_DEV_MODE:
+            raise HTTPException(status_code=503, detail="邮件服务未配置或发送失败，请稍后再试。")
 
     db.add(
         EmailVerificationCode(
@@ -151,6 +152,7 @@ async def send_email_code(db: AsyncSession, request: Request, email: str, scene:
         )
     )
     await db.commit()
+    return code if EMAIL_CODE_DEV_MODE and not sent else None
 
 
 async def verify_email_code(db: AsyncSession, email: str, scene: str, code: str, *, consume: bool = True) -> None:
