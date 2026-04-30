@@ -104,8 +104,6 @@ export default function LandingPage() {
   }, []);
 
   const studioHref = useMemo(() => (authed ? "/studio" : "/login?next=/studio"), [authed]);
-  const galleryHref = useMemo(() => (authed ? "/gallery" : "/login?next=/gallery"), [authed]);
-
   return (
     <div className="relative overflow-hidden bg-[#F5F7FB] text-[#1D1D1F]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_top_left,_rgba(0,122,255,0.16),_transparent_42%),radial-gradient(circle_at_85%_12%,_rgba(255,149,0,0.12),_transparent_28%)]" />
@@ -148,7 +146,7 @@ export default function LandingPage() {
               {heroChecklist.map((item) => (
                 <div key={item} className="flex items-center gap-3 text-[15px] text-[#46505F]">
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#E9F4FF] text-[#007AFF]">
-                    <CheckCircle2 className="h-4 w-4" />
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span>{item}</span>
                 </div>
@@ -189,7 +187,7 @@ export default function LandingPage() {
                 className="rounded-[28px] border border-black/5 bg-white p-7 shadow-card transition hover:-translate-y-1 hover:shadow-card-hover"
               >
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-[16px] bg-[#F0F7FF] text-[#007AFF]">
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <p className="mt-8 text-[13px] font-semibold uppercase tracking-[0.18em] text-[#007AFF]">
                   {pillar.eyebrow}
@@ -212,7 +210,7 @@ export default function LandingPage() {
               className="rounded-[26px] border border-black/5 bg-white p-6 shadow-card"
             >
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] bg-[#F5F7FB] text-[#007AFF]">
-                <Image className="h-5 w-5" />
+                <Image className="h-5 w-5" aria-hidden="true" />
               </div>
               <h3 className="mt-6 text-[22px] font-semibold text-[#0F172A]">{item.title}</h3>
               <p className="mt-3 text-[15px] leading-7 text-[#667085]">{item.desc}</p>
@@ -274,7 +272,7 @@ function HeroPreview() {
                   >
                     <span className="text-[13px] text-white/78">{step}</span>
                     <span className="inline-flex items-center gap-1 text-[12px] text-[#30D158]">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> 已完成
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> 已完成
                     </span>
                   </div>
                 ))}
@@ -282,7 +280,7 @@ function HeroPreview() {
 
               <div className="mt-4 rounded-[16px] bg-white/[0.07] p-3">
                 <div className="mb-2 flex items-center gap-2 text-[13px] text-white/65">
-                  <Search className="h-4 w-4" />
+                  <Search className="h-4 w-4" aria-hidden="true" />
                   当前约束
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -304,7 +302,7 @@ function HeroPreview() {
                   <p className="text-[13px] text-white/58">输出墙</p>
                   <h2 className="mt-1 text-[21px] font-semibold">首批可交付方向</h2>
                 </div>
-                <Image className="h-5 w-5 text-white/45" />
+                <Image className="h-5 w-5 text-white/45" aria-hidden="true" />
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -319,7 +317,7 @@ function HeroPreview() {
               <div className="mt-4 rounded-[18px] bg-white p-4 text-[#0F172A]">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-[13px] font-semibold">画布精修</span>
-                  <Wand2 className="h-4 w-4 text-[#007AFF]" />
+                  <Wand2 className="h-4 w-4 text-[#007AFF]" aria-hidden="true" />
                 </div>
                 <div className="space-y-2">
                   {["标题层", "门店优惠信息", "社媒按钮与角标"].map((layer) => (

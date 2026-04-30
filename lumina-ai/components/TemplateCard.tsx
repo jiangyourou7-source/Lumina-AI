@@ -32,7 +32,6 @@ export function TemplateCard({ category, title, prompt, imageUrl, onUse, onPrevi
               src={imageUrl}
               alt={title}
               onClick={() => {
-                console.log("preview image clicked", imageUrl);
                 onPreview?.();
               }}
               className="h-full w-full cursor-pointer object-cover transition duration-200 ease-out group-hover/image:scale-[1.03] group-hover/image:brightness-90"
