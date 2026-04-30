@@ -259,6 +259,7 @@ class PortraitReference(BaseModel):
     role: PortraitReferenceRole = "other"
     image_url: str = Field(min_length=1, max_length=15_000_000)
     label: Optional[str] = Field(default=None, max_length=80)
+    layer_id: Optional[str] = Field(default=None, max_length=120)
 
 
 class PortraitComposeRequest(BaseModel):

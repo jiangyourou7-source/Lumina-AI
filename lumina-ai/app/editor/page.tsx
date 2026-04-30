@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   ImagePlus,
   Loader2,
+  Lock,
   LogOut,
   MousePointer2,
   Plus,
@@ -19,6 +20,7 @@ import {
   Send,
   Trash2,
   Type,
+  Unlock,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
@@ -42,6 +44,13 @@ const EDITOR_SETTINGS_SEEN_KEY = "drmine-editor-settings-seen";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_REFERENCE_IMAGE_SIZE = 1600;
 const REFERENCE_IMAGE_QUALITY = 0.82;
+const DEFAULT_IMAGE_FRAME_SIZE = 640;
+const MIN_ELEMENT_SIZE = 40;
+const MAX_ELEMENT_SIZE = 4096;
+const WORKSPACE_SIZE = 7200;
+const WORKSPACE_ORIGIN = (WORKSPACE_SIZE - CANVAS_SIZE) / 2;
+const MIN_STAGE_SCALE = 0.18;
+const MAX_STAGE_SCALE = 2.5;
 
 type CanvasElement =
   | {
@@ -55,6 +64,7 @@ type CanvasElement =
       rotation: number;
       role?: PortraitReferenceRole;
       label?: string;
+      lockAspect?: boolean;
     }
   | {
       id: string;
@@ -77,18 +87,46 @@ interface CanvasDocument {
   elements: CanvasElement[];
 }
 
-interface DragState {
+type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+interface TransformState {
   id: string;
+  ids: string[];
+  mode: "move" | "resize" | "rotate";
   startX: number;
   startY: number;
-  originX: number;
-  originY: number;
+  origin: CanvasElement;
+  origins: Record<string, CanvasElement>;
   snapshot: CanvasDocument;
+  handle?: ResizeHandle;
+  centerClientX?: number;
+  centerClientY?: number;
+  startAngle?: number;
+  startRotation?: number;
 }
 
 interface SnapGuide {
   orientation: "vertical" | "horizontal";
   position: number;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface MarqueeState {
+  start: Point;
+  current: Point;
+  additive: boolean;
+  originIds: string[];
+}
+
+interface WorkspacePanState {
+  startX: number;
+  startY: number;
+  origin: Point;
+  moved: boolean;
 }
 
 interface HistoryState {
@@ -110,10 +148,21 @@ interface HorizontalMatch {
 
 type Axis = "x" | "y" | "both";
 
+const resizeHandles: Array<{ handle: ResizeHandle; className: string; cursor: string }> = [
+  { handle: "nw", className: "left-0 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "nwse-resize" },
+  { handle: "n", className: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "ns-resize" },
+  { handle: "ne", className: "right-0 top-0 -translate-y-1/2 translate-x-1/2", cursor: "nesw-resize" },
+  { handle: "e", className: "right-0 top-1/2 -translate-y-1/2 translate-x-1/2", cursor: "ew-resize" },
+  { handle: "se", className: "bottom-0 right-0 translate-x-1/2 translate-y-1/2", cursor: "nwse-resize" },
+  { handle: "s", className: "bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2", cursor: "ns-resize" },
+  { handle: "sw", className: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2", cursor: "nesw-resize" },
+  { handle: "w", className: "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2", cursor: "ew-resize" },
+];
+
 const emptyDocument: CanvasDocument = {
   width: CANVAS_SIZE,
   height: CANVAS_SIZE,
-  background: "#FFFFFF",
+  background: "transparent",
   elements: [],
 };
 
@@ -243,9 +292,20 @@ function normalizeCanvasData(data: unknown): CanvasDocument {
   return {
     width: CANVAS_SIZE,
     height: CANVAS_SIZE,
-    background: maybeDoc.background || "#FFFFFF",
+    background: isTransparentCanvasBackground(maybeDoc.background) ? "transparent" : maybeDoc.background || "transparent",
     elements: Array.isArray(maybeDoc.elements) ? maybeDoc.elements : [],
   };
+}
+
+function isTransparentCanvasBackground(background?: string) {
+  const value = background?.trim().toLowerCase();
+  return !value || value === "transparent" || value === "#fff" || value === "#ffffff" || value === "white";
+}
+
+function paintDocumentBackground(context: CanvasRenderingContext2D, background: string) {
+  if (isTransparentCanvasBackground(background)) return;
+  context.fillStyle = background;
+  context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 }
 
 function downloadDataUrl(dataUrl: string, filename: string) {
@@ -276,8 +336,7 @@ async function renderDocumentToDataUrl(doc: CanvasDocument, maxSize = CANVAS_SIZ
   if (!context) throw new Error("无法创建画布");
 
   context.scale(scale, scale);
-  context.fillStyle = doc.background;
-  context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  paintDocumentBackground(context, doc.background);
 
   for (const element of doc.elements) {
     context.save();
@@ -338,6 +397,20 @@ function loadImageFromDataUrl(dataUrl: string) {
   });
 }
 
+function getFittedImageFrame(width: number, height: number, maxSize = DEFAULT_IMAGE_FRAME_SIZE) {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const scale = Math.min(1, maxSize / Math.max(safeWidth, safeHeight));
+  const fittedWidth = Math.max(MIN_ELEMENT_SIZE, Math.round(safeWidth * scale));
+  const fittedHeight = Math.max(MIN_ELEMENT_SIZE, Math.round(safeHeight * scale));
+  return {
+    width: fittedWidth,
+    height: fittedHeight,
+    x: Math.round((CANVAS_SIZE - fittedWidth) / 2),
+    y: Math.round((CANVAS_SIZE - fittedHeight) / 2),
+  };
+}
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -367,6 +440,54 @@ async function compressReferenceImage(file: File) {
   context.fillRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
   return canvas.toDataURL("image/jpeg", REFERENCE_IMAGE_QUALITY);
+}
+
+function getResizePatch(origin: CanvasElement, handle: ResizeHandle, dx: number, dy: number, lockAspect = false) {
+  const angle = (origin.rotation * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const localDx = dx * cos + dy * sin;
+  const localDy = -dx * sin + dy * cos;
+  const affectsLeft = handle.includes("w");
+  const affectsRight = handle.includes("e");
+  const affectsTop = handle.includes("n");
+  const affectsBottom = handle.includes("s");
+  const requestedWidth = origin.width + (affectsRight ? localDx : 0) + (affectsLeft ? -localDx : 0);
+  const requestedHeight = origin.height + (affectsBottom ? localDy : 0) + (affectsTop ? -localDy : 0);
+  let width = Math.round(clamp(requestedWidth, MIN_ELEMENT_SIZE, MAX_ELEMENT_SIZE));
+  let height = Math.round(clamp(requestedHeight, MIN_ELEMENT_SIZE, MAX_ELEMENT_SIZE));
+  if (lockAspect && origin.width > 0 && origin.height > 0) {
+    const aspect = origin.width / origin.height;
+    const widthChangeRatio = Math.abs(width - origin.width) / origin.width;
+    const heightChangeRatio = Math.abs(height - origin.height) / origin.height;
+    const useWidth = (affectsLeft || affectsRight) && (!(affectsTop || affectsBottom) || widthChangeRatio >= heightChangeRatio);
+
+    if (useWidth) {
+      height = Math.round(clamp(width / aspect, MIN_ELEMENT_SIZE, MAX_ELEMENT_SIZE));
+    } else {
+      width = Math.round(clamp(height * aspect, MIN_ELEMENT_SIZE, MAX_ELEMENT_SIZE));
+    }
+  }
+  const appliedWidthDelta = width - origin.width;
+  const appliedHeightDelta = height - origin.height;
+  const centerX = origin.x + origin.width / 2;
+  const centerY = origin.y + origin.height / 2;
+  const horizontalSign = affectsRight ? 1 : affectsLeft ? -1 : 0;
+  const verticalSign = affectsBottom ? 1 : affectsTop ? -1 : 0;
+  const nextCenterX = centerX + (cos * horizontalSign * appliedWidthDelta) / 2 + (-sin * verticalSign * appliedHeightDelta) / 2;
+  const nextCenterY = centerY + (sin * horizontalSign * appliedWidthDelta) / 2 + (cos * verticalSign * appliedHeightDelta) / 2;
+
+  return {
+    width,
+    height,
+    x: Math.round(nextCenterX - width / 2),
+    y: Math.round(nextCenterY - height / 2),
+  };
+}
+
+function normalizeRotation(value: number) {
+  const rotation = Math.round(value % 360);
+  return rotation < -180 ? rotation + 360 : rotation > 180 ? rotation - 360 : rotation;
 }
 
 function buildCanvasFallbackPrompt(instruction: string) {
@@ -476,10 +597,51 @@ function getSnappedPosition(
   }
 
   return {
-    x: clamp(bestX, 0, CANVAS_SIZE - activeElement.width),
-    y: clamp(bestY, 0, CANVAS_SIZE - activeElement.height),
+    x: bestX,
+    y: bestY,
     guides,
   };
+}
+
+function getCanvasElementsBounds(elements: CanvasElement[]) {
+  if (elements.length === 0) return null;
+  const left = Math.min(...elements.map((element) => element.x));
+  const top = Math.min(...elements.map((element) => element.y));
+  const right = Math.max(...elements.map((element) => element.x + element.width));
+  const bottom = Math.max(...elements.map((element) => element.y + element.height));
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+    right,
+    bottom,
+  };
+}
+
+function normalizeRect(start: Point, current: Point) {
+  const left = Math.min(start.x, current.x);
+  const top = Math.min(start.y, current.y);
+  const right = Math.max(start.x, current.x);
+  const bottom = Math.max(start.y, current.y);
+  return { x: left, y: top, width: right - left, height: bottom - top, right, bottom };
+}
+
+function rectIntersectsElement(rect: ReturnType<typeof normalizeRect>, element: CanvasElement) {
+  return (
+    rect.x <= element.x + element.width &&
+    rect.right >= element.x &&
+    rect.y <= element.y + element.height &&
+    rect.bottom >= element.y
+  );
+}
+
+function uniqueIds(ids: string[]) {
+  return Array.from(new Set(ids));
+}
+
+function getImageAspectLocked(element: CanvasElement) {
+  return element.type === "image" && element.lockAspect !== false;
 }
 
 export default function EditorPage() {
@@ -488,10 +650,14 @@ export default function EditorPage() {
   const [canvasId, setCanvasId] = useState<number | null>(null);
   const [doc, setDoc] = useState<CanvasDocument>(emptyDocument);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [canvasList, setCanvasList] = useState<CanvasData[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [stageScale, setStageScale] = useState(1);
+  const [stageScale, setStageScale] = useState(0.59);
+  const [workspacePan, setWorkspacePan] = useState<Point>({ x: 0, y: 0 });
+  const [workspacePanDrag, setWorkspacePanDrag] = useState<WorkspacePanState | null>(null);
+  const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsAutoDismissing, setSettingsAutoDismissing] = useState(false);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -507,7 +673,7 @@ export default function EditorPage() {
   const [prompt, setPrompt] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
   const [pendingUploadRole, setPendingUploadRole] = useState<PortraitReferenceRole>("other");
-  const [drag, setDrag] = useState<DragState | null>(null);
+  const [drag, setDrag] = useState<TransformState | null>(null);
   const [history, setHistory] = useState<HistoryState>({ past: [], future: [] });
   const [authReady, setAuthReady] = useState(false);
   const [quota, setQuota] = useState<{ total: number; used: number; remaining: number } | null>(null);
@@ -515,6 +681,7 @@ export default function EditorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
   const docRef = useRef(doc);
   const settingsFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -614,6 +781,29 @@ export default function EditorPage() {
     [activeId, doc.elements]
   );
 
+  const selectedElements = useMemo(
+    () => doc.elements.filter((element) => selectedElementIds.includes(element.id)),
+    [doc.elements, selectedElementIds]
+  );
+
+  const selectedReferenceImages = useMemo(
+    () =>
+      selectedElements
+        .filter((element): element is Extract<CanvasElement, { type: "image" }> => element.type === "image")
+        .map((element, index) => ({
+          element,
+          imageUrl: element.src,
+          layerId: element.id,
+          label: `reference_${index + 1}`,
+          displayLabel: `参考图 ${index + 1}`,
+          role: element.role || "other",
+          roleLabel: getMaterialRoleLabel(element.role),
+        })),
+    [selectedElements]
+  );
+
+  const selectedBounds = useMemo(() => getCanvasElementsBounds(selectedElements), [selectedElements]);
+
   const layerItems = useMemo(
     () => doc.elements.map((element, index) => ({ element, index })).reverse(),
     [doc.elements]
@@ -636,6 +826,32 @@ export default function EditorPage() {
     }
   }, []);
 
+  const toggleProjectMenu = useCallback(() => {
+    setProjectMenuOpen((open) => {
+      if (!open) void refreshCanvasList();
+      return !open;
+    });
+  }, [refreshCanvasList]);
+
+  useEffect(() => {
+    if (!projectMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (projectMenuRef.current?.contains(event.target as Node)) return;
+      setProjectMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProjectMenuOpen(false);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [projectMenuOpen]);
+
   useEffect(() => {
     refreshCanvasList();
   }, [refreshCanvasList]);
@@ -646,19 +862,23 @@ export default function EditorPage() {
 
     const updateScale = () => {
       const maxCanvas = Math.min(node.clientWidth * 0.72, node.clientHeight * 0.72, 640);
-      setStageScale(Math.max(0.24, maxCanvas / CANVAS_SIZE));
+      setStageScale(Math.max(MIN_STAGE_SCALE, maxCanvas / CANVAS_SIZE));
     };
 
     updateScale();
     const observer = new ResizeObserver(updateScale);
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [assistantCollapsed, authReady]);
 
   useEffect(() => {
     if (activeId && !doc.elements.some((element) => element.id === activeId)) {
       setActiveId(null);
     }
+    setSelectedElementIds((current) => {
+      const next = current.filter((id) => doc.elements.some((element) => element.id === id));
+      return next.length === current.length ? current : next;
+    });
   }, [activeId, doc.elements]);
 
   const pushHistorySnapshot = useCallback((snapshot: CanvasDocument) => {
@@ -713,6 +933,20 @@ export default function EditorPage() {
     [applyDocChange]
   );
 
+  const selectElements = useCallback((ids: string[], active = ids[ids.length - 1] || null) => {
+    const nextIds = uniqueIds(ids);
+    setSelectedElementIds(nextIds);
+    setActiveId(active && nextIds.includes(active) ? active : nextIds[nextIds.length - 1] || null);
+  }, []);
+
+  const toggleElementSelection = useCallback((id: string) => {
+    setSelectedElementIds((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      setActiveId(next.includes(id) ? id : next[next.length - 1] || null);
+      return next;
+    });
+  }, []);
+
   const addText = useCallback(
     (content = "输入文案") => {
       const element: CanvasElement = {
@@ -729,29 +963,37 @@ export default function EditorPage() {
         fontWeight: 600,
       };
       applyDocChange((current) => ({ ...current, elements: [...current.elements, element] }));
-      setActiveId(element.id);
+      selectElements([element.id], element.id);
+      return element;
     },
-    [applyDocChange]
+    [applyDocChange, selectElements]
   );
 
   const addImage = useCallback(
-    (src: string, role: PortraitReferenceRole = "other", label?: string) => {
+    (
+      src: string,
+      role: PortraitReferenceRole = "other",
+      label?: string,
+      frame = getFittedImageFrame(DEFAULT_IMAGE_FRAME_SIZE, DEFAULT_IMAGE_FRAME_SIZE)
+    ) => {
       const element: CanvasElement = {
         id: createId(),
         type: "image",
         src,
         role,
         label,
-        x: 170,
-        y: 170,
-        width: 640,
-        height: 640,
+        x: frame.x,
+        y: frame.y,
+        width: frame.width,
+        height: frame.height,
         rotation: 0,
+        lockAspect: true,
       };
       applyDocChange((current) => ({ ...current, elements: [...current.elements, element] }));
-      setActiveId(element.id);
+      selectElements([element.id], element.id);
+      return element;
     },
-    [applyDocChange]
+    [applyDocChange, selectElements]
   );
 
   const duplicateElement = useCallback(
@@ -762,26 +1004,54 @@ export default function EditorPage() {
       const duplicated = {
         ...source,
         id: createId(),
-        x: clamp(source.x + 28, 0, CANVAS_SIZE - source.width),
-        y: clamp(source.y + 28, 0, CANVAS_SIZE - source.height),
+        x: source.x + 28,
+        y: source.y + 28,
       } as CanvasElement;
 
       applyDocChange((current) => ({ ...current, elements: [...current.elements, duplicated] }));
-      setActiveId(duplicated.id);
+      selectElements([duplicated.id], duplicated.id);
       setMessage("已复制图层");
     },
-    [applyDocChange]
+    [applyDocChange, selectElements]
   );
 
-  const removeActiveElement = useCallback(() => {
-    if (!activeId) return;
+  const duplicateSelectedElements = useCallback(() => {
+    const ids = selectedElementIds.length ? selectedElementIds : activeId ? [activeId] : [];
+    const selectedSet = new Set(ids);
+    const sources = docRef.current.elements.filter((element) => selectedSet.has(element.id));
+    if (sources.length === 0) return;
+    if (sources.length === 1) {
+      duplicateElement(sources[0].id);
+      return;
+    }
+
+    const duplicated = sources.map(
+      (source) =>
+        ({
+          ...source,
+          id: createId(),
+          x: source.x + 28,
+          y: source.y + 28,
+        }) as CanvasElement
+    );
+    applyDocChange((current) => ({ ...current, elements: [...current.elements, ...duplicated] }));
+    selectElements(duplicated.map((element) => element.id), duplicated[duplicated.length - 1]?.id || null);
+    setMessage(`已复制 ${duplicated.length} 个图层`);
+  }, [activeId, applyDocChange, duplicateElement, selectElements, selectedElementIds]);
+
+  const removeSelectedElements = useCallback(() => {
+    const ids = selectedElementIds.length ? selectedElementIds : activeId ? [activeId] : [];
+    if (ids.length === 0) return;
+    const selectedSet = new Set(ids);
     applyDocChange((current) => ({
       ...current,
-      elements: current.elements.filter((element) => element.id !== activeId),
+      elements: current.elements.filter((element) => !selectedSet.has(element.id)),
     }));
-    setActiveId(null);
-    setMessage("图层已删除");
-  }, [activeId, applyDocChange]);
+    selectElements([]);
+    setMessage(ids.length > 1 ? `已删除 ${ids.length} 个图层` : "图层已删除");
+  }, [activeId, applyDocChange, selectElements, selectedElementIds]);
+
+  const removeActiveElement = removeSelectedElements;
 
   const moveElementLayer = useCallback(
     (id: string, delta: number) => {
@@ -801,51 +1071,74 @@ export default function EditorPage() {
 
   const centerActiveElement = useCallback(
     (axis: Axis) => {
-      if (!activeElement) return;
-      updateElement(
-        activeElement.id,
-        {
-          ...(axis === "x" || axis === "both"
-            ? { x: Math.round((CANVAS_SIZE - activeElement.width) / 2) }
-            : {}),
-          ...(axis === "y" || axis === "both"
-            ? { y: Math.round((CANVAS_SIZE - activeElement.height) / 2) }
-            : {}),
-        },
-        true
-      );
+      const targets = selectedElements.length ? selectedElements : activeElement ? [activeElement] : [];
+      const bounds = getCanvasElementsBounds(targets);
+      if (!bounds) return;
+      const dx = axis === "x" || axis === "both" ? Math.round((CANVAS_SIZE - bounds.width) / 2 - bounds.x) : 0;
+      const dy = axis === "y" || axis === "both" ? Math.round((CANVAS_SIZE - bounds.height) / 2 - bounds.y) : 0;
+      applyDocChange((current) => {
+        const selectedSet = new Set(targets.map((element) => element.id));
+        return {
+          ...current,
+          elements: current.elements.map((element) =>
+            selectedSet.has(element.id) ? ({ ...element, x: element.x + dx, y: element.y + dy } as CanvasElement) : element
+          ),
+        };
+      });
       setMessage("已对齐到画布中心");
     },
-    [activeElement, updateElement]
+    [activeElement, applyDocChange, selectedElements]
+  );
+
+  const alignSelectedElements = useCallback(
+    (align: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => {
+      if (selectedElements.length < 2) return;
+      const bounds = getCanvasElementsBounds(selectedElements);
+      if (!bounds) return;
+      const selectedSet = new Set(selectedElements.map((element) => element.id));
+      applyDocChange((current) => ({
+        ...current,
+        elements: current.elements.map((element) => {
+          if (!selectedSet.has(element.id)) return element;
+          if (align === "left") return { ...element, x: bounds.x } as CanvasElement;
+          if (align === "right") return { ...element, x: bounds.right - element.width } as CanvasElement;
+          if (align === "centerX") return { ...element, x: Math.round(bounds.x + bounds.width / 2 - element.width / 2) } as CanvasElement;
+          if (align === "top") return { ...element, y: bounds.y } as CanvasElement;
+          if (align === "bottom") return { ...element, y: bounds.bottom - element.height } as CanvasElement;
+          return { ...element, y: Math.round(bounds.y + bounds.height / 2 - element.height / 2) } as CanvasElement;
+        }),
+      }));
+      setMessage("已对齐所选元素");
+    },
+    [applyDocChange, selectedElements]
   );
 
   const nudgeActiveElement = useCallback(
     (dx: number, dy: number) => {
-      if (!activeId) return;
+      const ids = selectedElementIds.length ? selectedElementIds : activeId ? [activeId] : [];
+      if (ids.length === 0) return;
+      const selectedSet = new Set(ids);
       applyDocChange((current) => {
-        const target = current.elements.find((element) => element.id === activeId);
-        if (!target) return current;
-        const nextX = clamp(target.x + dx, 0, CANVAS_SIZE - target.width);
-        const nextY = clamp(target.y + dy, 0, CANVAS_SIZE - target.height);
         return {
           ...current,
           elements: current.elements.map((element) =>
-            element.id === activeId ? ({ ...element, x: nextX, y: nextY } as CanvasElement) : element
+            selectedSet.has(element.id) ? ({ ...element, x: element.x + dx, y: element.y + dy } as CanvasElement) : element
           ),
         };
       });
     },
-    [activeId, applyDocChange]
+    [activeId, applyDocChange, selectedElementIds]
   );
 
-  const resetCanvas = useCallback(() => {
+  const resetCanvas = useCallback((keepProjectMenuOpen = false) => {
     setCanvasId(null);
     setTitle(DEFAULT_PROJECT_TITLE);
     replaceDocument(emptyDocument, true);
-    setActiveId(null);
-    setMessage("");
-    setProjectMenuOpen(false);
-  }, [replaceDocument]);
+    selectElements([]);
+    setMessage("已新建空白项目，保存后会出现在已保存项目里");
+    setProjectMenuOpen(keepProjectMenuOpen);
+    if (keepProjectMenuOpen) void refreshCanvasList();
+  }, [refreshCanvasList, replaceDocument, selectElements]);
 
   const undo = useCallback(() => {
     if (!docRef.current || !canUndo) return;
@@ -891,22 +1184,24 @@ export default function EditorPage() {
     setMessage("");
 
     try {
+      const referenceImages = selectedReferenceImages;
       const sourceMaterials = imageMaterials.filter((element) => !element.label?.startsWith("写真成片"));
-      const requiredQuota = sourceMaterials.length > 0 || !activeElement ? imageCount : activeElement.type === "image" ? 1 : 0;
+      const requiredQuota = referenceImages.length > 0 || !activeElement ? imageCount : activeElement.type === "image" ? 1 : 0;
       if (quota && requiredQuota > 0 && quota.remaining < requiredQuota) {
         setMessage("当前图片生成额度已用完，请联系管理员升级权限。");
         return;
       }
-      if (sourceMaterials.length > 0) {
-        if (!sourceMaterials.some((element) => (element.role || "other") === "person")) {
+      if (referenceImages.length > 0) {
+        if (false && !sourceMaterials.some((element) => (element.role || "other") === "person")) {
           setMessage("请先上传并标记人物主体素材，再生成写真");
           return;
         }
 
-        const references = sourceMaterials.map((element) => ({
-          role: element.role || "other",
-          imageUrl: element.src,
-          label: element.label || getMaterialRoleLabel(element.role),
+        const references = referenceImages.map((item) => ({
+          role: item.role,
+          imageUrl: item.imageUrl,
+          layerId: item.layerId,
+          label: `${item.label} / ${item.roleLabel}`,
         }));
 
         let successCount = 0;
@@ -928,6 +1223,7 @@ export default function EditorPage() {
             addImage(result.url, "other", label);
             successCount += 1;
           } catch (composeError) {
+            if (referenceImages.length > 0) throw composeError;
             try {
               setMessage(`第 ${index}/${imageCount} 张多素材生成未成功，正在使用当前画布合成图兜底...`);
               const canvasReference = await renderDocumentToDataUrl(docRef.current, 1024);
@@ -1053,22 +1349,24 @@ export default function EditorPage() {
     quota,
     ratio,
     removeActiveElement,
+    selectedReferenceImages,
     updateElement,
   ]);
 
   const handleImageUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const input = event.currentTarget;
-      const file = input.files?.[0];
+      const files = Array.from(input.files || []);
+      const file = files[0];
       if (!file) return;
 
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      if (files.some((item) => !["image/png", "image/jpeg", "image/webp"].includes(item.type))) {
         setMessage("仅支持 PNG、JPG、WEBP 图片");
         input.value = "";
         return;
       }
 
-      if (file.size > MAX_UPLOAD_BYTES) {
+      if (files.some((item) => item.size > MAX_UPLOAD_BYTES)) {
         setMessage("图片不能超过 10MB");
         input.value = "";
         return;
@@ -1077,8 +1375,32 @@ export default function EditorPage() {
       try {
         const role = pendingUploadRole;
         setMessage("正在处理素材...");
+        const addedIds: string[] = [];
         const imageUrl = await compressReferenceImage(file);
-        addImage(imageUrl, role, getMaterialRoleLabel(role));
+        const image = await loadImageFromDataUrl(imageUrl);
+        const firstElement = addImage(
+          imageUrl,
+          role,
+          getMaterialRoleLabel(role),
+          getFittedImageFrame(image.naturalWidth || image.width, image.naturalHeight || image.height)
+        );
+        if (firstElement) addedIds.push(firstElement.id);
+        for (const [index, extraFile] of files.slice(1).entries()) {
+          const extraImageUrl = await compressReferenceImage(extraFile);
+          const extraImage = await loadImageFromDataUrl(extraImageUrl);
+          const frame = getFittedImageFrame(
+            extraImage.naturalWidth || extraImage.width,
+            extraImage.naturalHeight || extraImage.height
+          );
+          const offset = (index + 1) * 32;
+          const extraElement = addImage(extraImageUrl, role, getMaterialRoleLabel(role), {
+            ...frame,
+            x: frame.x + offset,
+            y: frame.y + offset,
+          });
+          if (extraElement) addedIds.push(extraElement.id);
+        }
+        selectElements(addedIds, addedIds[addedIds.length - 1] || null);
         setMessage(`${getMaterialRoleLabel(role)}素材已添加`);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "图片处理失败，请换一张图片重试");
@@ -1086,7 +1408,7 @@ export default function EditorPage() {
         input.value = "";
       }
     },
-    [addImage, pendingUploadRole]
+    [addImage, pendingUploadRole, selectElements]
   );
 
   const startMaterialUpload = useCallback((role: PortraitReferenceRole) => {
@@ -1104,8 +1426,7 @@ export default function EditorPage() {
       if (!context) throw new Error("无法创建画布");
 
       context.scale(scale, scale);
-      context.fillStyle = doc.background;
-      context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      paintDocumentBackground(context, doc.background);
 
       for (const element of doc.elements) {
         context.save();
@@ -1165,7 +1486,7 @@ export default function EditorPage() {
       setCanvasId(saved.id);
       setTitle(saved.title);
       setMessage("画布已保存");
-      refreshCanvasList();
+      await refreshCanvasList();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存失败");
     } finally {
@@ -1180,14 +1501,185 @@ export default function EditorPage() {
         setCanvasId(data.id);
         setTitle(data.title);
         replaceDocument(normalizeCanvasData(data.canvas_data), true);
-        setActiveId(null);
+        selectElements([]);
         setMessage("画布已打开");
         setProjectMenuOpen(false);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "打开失败");
       }
     },
-    [replaceDocument]
+    [replaceDocument, selectElements]
+  );
+
+  const clientToCanvasPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = stageWrapRef.current?.getBoundingClientRect();
+      if (!rect) return { x: 0, y: 0 };
+      return {
+        x: (clientX - rect.left - rect.width / 2 - workspacePan.x) / stageScale - WORKSPACE_ORIGIN,
+        y: (clientY - rect.top - rect.height / 2 - workspacePan.y) / stageScale - WORKSPACE_ORIGIN,
+      };
+    },
+    [stageScale, workspacePan.x, workspacePan.y]
+  );
+
+  const zoomWorkspace = useCallback((nextScale: number, pivot?: { clientX: number; clientY: number }) => {
+    setStageScale((currentScale) => {
+      const clampedScale = clamp(nextScale, MIN_STAGE_SCALE, MAX_STAGE_SCALE);
+      if (!pivot || !stageWrapRef.current) return clampedScale;
+      const rect = stageWrapRef.current.getBoundingClientRect();
+      const pointerX = pivot.clientX - rect.left - rect.width / 2;
+      const pointerY = pivot.clientY - rect.top - rect.height / 2;
+      setWorkspacePan((currentPan) => ({
+        x: pointerX - ((pointerX - currentPan.x) / currentScale) * clampedScale,
+        y: pointerY - ((pointerY - currentPan.y) / currentScale) * clampedScale,
+      }));
+      return clampedScale;
+    });
+  }, []);
+
+  const handleWorkspaceWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const factor = event.deltaY > 0 ? 0.92 : 1.08;
+      zoomWorkspace(stageScale * factor, { clientX: event.clientX, clientY: event.clientY });
+    },
+    [stageScale, zoomWorkspace]
+  );
+
+  const handleWorkspacePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget && (event.target as HTMLElement).closest("[data-canvas-element]")) return;
+      if (event.button !== 0 && event.button !== 1) return;
+      event.preventDefault();
+
+      const point = clientToCanvasPoint(event.clientX, event.clientY);
+      const shouldPan = event.button === 1 || event.altKey;
+      const shouldMarquee = event.button === 0 && !shouldPan;
+
+      if (shouldMarquee) {
+        setSnapGuides([]);
+        let latestMarquee: MarqueeState = {
+          start: point,
+          current: point,
+          additive: event.shiftKey || event.ctrlKey || event.metaKey,
+          originIds: event.shiftKey || event.ctrlKey || event.metaKey ? selectedElementIds : [],
+        };
+        setMarquee(latestMarquee);
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey) selectElements([]);
+
+        const updateMarquee = (pointerEvent: PointerEvent) => {
+          const current = clientToCanvasPoint(pointerEvent.clientX, pointerEvent.clientY);
+          const rect = normalizeRect(point, current);
+          const framedIds = docRef.current.elements
+            .filter((element) => rectIntersectsElement(rect, element))
+            .map((element) => element.id);
+          const nextIds = latestMarquee.additive ? uniqueIds([...latestMarquee.originIds, ...framedIds]) : framedIds;
+          latestMarquee = { ...latestMarquee, current };
+          setMarquee(latestMarquee);
+          selectElements(nextIds, nextIds[nextIds.length - 1] || null);
+        };
+
+        const finishMarquee = (pointerEvent: PointerEvent) => {
+          updateMarquee(pointerEvent);
+          const rect = normalizeRect(latestMarquee.start, latestMarquee.current);
+          if (rect.width < 3 && rect.height < 3 && !latestMarquee.additive) {
+            selectElements([]);
+          }
+          setMarquee(null);
+          window.removeEventListener("pointermove", updateMarquee);
+          window.removeEventListener("pointerup", finishMarquee);
+          window.removeEventListener("pointercancel", finishMarquee);
+        };
+
+        window.addEventListener("pointermove", updateMarquee);
+        window.addEventListener("pointerup", finishMarquee);
+        window.addEventListener("pointercancel", finishMarquee);
+        return;
+      }
+
+      setWorkspacePanDrag({
+        startX: event.clientX,
+        startY: event.clientY,
+        origin: workspacePan,
+        moved: false,
+      });
+    },
+    [clientToCanvasPoint, selectElements, selectedElementIds, workspacePan]
+  );
+
+  useEffect(() => {
+    if (!workspacePanDrag) return;
+
+    const handleMove = (event: PointerEvent) => {
+      const dx = event.clientX - workspacePanDrag.startX;
+      const dy = event.clientY - workspacePanDrag.startY;
+      setWorkspacePan({
+        x: workspacePanDrag.origin.x + dx,
+        y: workspacePanDrag.origin.y + dy,
+      });
+      setWorkspacePanDrag((current) => (current ? { ...current, moved: current.moved || Math.abs(dx) > 2 || Math.abs(dy) > 2 } : current));
+    };
+
+    const handleUp = () => {
+      if (!workspacePanDrag.moved) selectElements([]);
+      setWorkspacePanDrag(null);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [selectElements, workspacePanDrag]);
+
+  const beginElementTransform = useCallback(
+    (
+      event: React.PointerEvent<HTMLElement>,
+      element: CanvasElement,
+      mode: TransformState["mode"],
+      handle?: ResizeHandle
+    ) => {
+      event.stopPropagation();
+      event.preventDefault();
+      if ((event.shiftKey || event.ctrlKey || event.metaKey) && mode === "move") {
+        toggleElementSelection(element.id);
+        return;
+      }
+
+      const ids = mode === "move" && selectedElementIds.includes(element.id) ? selectedElementIds : [element.id];
+      if (!selectedElementIds.includes(element.id) || selectedElementIds.length !== ids.length) {
+        selectElements(ids, element.id);
+      } else {
+        setActiveId(element.id);
+      }
+
+      const node = (event.currentTarget as HTMLElement).closest("[data-canvas-element]");
+      const rect = node?.getBoundingClientRect();
+      const centerClientX = rect ? rect.left + rect.width / 2 : event.clientX;
+      const centerClientY = rect ? rect.top + rect.height / 2 : event.clientY;
+
+      setDrag({
+        id: element.id,
+        ids,
+        mode,
+        handle,
+        startX: event.clientX,
+        startY: event.clientY,
+        origin: { ...element } as CanvasElement,
+        origins: Object.fromEntries(
+          docRef.current.elements.filter((item) => ids.includes(item.id)).map((item) => [item.id, { ...item } as CanvasElement])
+        ),
+        snapshot: cloneDoc(docRef.current),
+        centerClientX,
+        centerClientY,
+        startAngle: Math.atan2(event.clientY - centerClientY, event.clientX - centerClientX),
+        startRotation: element.rotation,
+      });
+    },
+    [selectElements, selectedElementIds, toggleElementSelection]
   );
 
   useEffect(() => {
@@ -1199,19 +1691,51 @@ export default function EditorPage() {
 
       const dx = (event.clientX - drag.startX) / stageScale;
       const dy = (event.clientY - drag.startY) / stageScale;
-      const rawX = clamp(drag.originX + dx, 0, CANVAS_SIZE - active.width);
-      const rawY = clamp(drag.originY + dy, 0, CANVAS_SIZE - active.height);
-      const snapped = getSnappedPosition(active, rawX, rawY, docRef.current.elements, drag.id, snapEnabled);
 
-      setSnapGuides(snapped.guides);
-      updateElement(
-        drag.id,
-        {
-          x: snapped.x,
-          y: snapped.y,
-        },
-        false
-      );
+      if (drag.mode === "move") {
+        if (drag.ids.length > 1) {
+          const selectedSet = new Set(drag.ids);
+          setSnapGuides([]);
+          setDoc((current) => ({
+            ...current,
+            elements: current.elements.map((element) => {
+              const origin = drag.origins[element.id];
+              return selectedSet.has(element.id) && origin
+                ? ({ ...element, x: Math.round(origin.x + dx), y: Math.round(origin.y + dy) } as CanvasElement)
+                : element;
+            }),
+          }));
+          return;
+        }
+
+        const rawX = drag.origin.x + dx;
+        const rawY = drag.origin.y + dy;
+        const snapped = getSnappedPosition(active, rawX, rawY, docRef.current.elements, drag.id, snapEnabled);
+
+        setSnapGuides(snapped.guides);
+        updateElement(
+          drag.id,
+          {
+            x: snapped.x,
+            y: snapped.y,
+          },
+          false
+        );
+        return;
+      }
+
+      setSnapGuides([]);
+
+      if (drag.mode === "resize" && drag.handle) {
+        updateElement(drag.id, getResizePatch(drag.origin, drag.handle, dx, dy, getImageAspectLocked(drag.origin)), false);
+        return;
+      }
+
+      if (drag.mode === "rotate" && drag.centerClientX && drag.centerClientY && drag.startAngle !== undefined) {
+        const currentAngle = Math.atan2(event.clientY - drag.centerClientY, event.clientX - drag.centerClientX);
+        const angleDelta = ((currentAngle - drag.startAngle) * 180) / Math.PI;
+        updateElement(drag.id, { rotation: normalizeRotation((drag.startRotation || 0) + angleDelta) }, false);
+      }
     };
 
     const handleUp = () => {
@@ -1258,6 +1782,12 @@ export default function EditorPage() {
         return;
       }
 
+      if (meta && key === "d") {
+        event.preventDefault();
+        duplicateSelectedElements();
+        return;
+      }
+
       if (!meta && key === "c" && !isEditableTarget(event.target)) {
         event.preventDefault();
         promptInputRef.current?.focus();
@@ -1266,13 +1796,13 @@ export default function EditorPage() {
 
       if (isEditableTarget(event.target)) return;
 
-      if ((event.key === "Delete" || event.key === "Backspace") && activeId) {
+      if ((event.key === "Delete" || event.key === "Backspace") && (activeId || selectedElementIds.length > 0)) {
         event.preventDefault();
-        removeActiveElement();
+        removeSelectedElements();
         return;
       }
 
-      if (!activeId) return;
+      if (!activeId && selectedElementIds.length === 0) return;
 
       const step = event.shiftKey ? 10 : 1;
       if (event.key === "ArrowLeft") {
@@ -1292,16 +1822,17 @@ export default function EditorPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeId, handleSave, nudgeActiveElement, redo, removeActiveElement, undo]);
+  }, [activeId, duplicateSelectedElements, handleSave, nudgeActiveElement, redo, removeSelectedElements, selectedElementIds.length, undo]);
 
   return authReady ? (
     <div className="h-screen overflow-hidden bg-[#F7F7F8] text-[#1D1D1F]">
+      <span className="sr-only" aria-live="polite">{message}</span>
       <header
         className={`absolute left-0 top-0 z-20 flex h-12 items-center justify-between px-4 ${
           assistantCollapsed ? "right-0" : "right-[360px]"
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div ref={projectMenuRef} className="flex items-center gap-3">
           <button className="flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white shadow-sm">
             <BrandLogo className="h-5 w-5" />
           </button>
@@ -1312,7 +1843,7 @@ export default function EditorPage() {
             className="h-8 w-48 rounded-[9px] bg-transparent px-1 text-[15px] font-semibold outline-none hover:bg-white/70 focus:bg-white"
           />
           <button
-            onClick={() => setProjectMenuOpen((open) => !open)}
+            onClick={toggleProjectMenu}
             className="rounded-full p-1.5 text-[#8E8E93] hover:bg-white"
             title="项目菜单"
           >
@@ -1321,18 +1852,18 @@ export default function EditorPage() {
           {projectMenuOpen && (
             <div className="absolute left-14 top-11 z-40 w-[300px] rounded-[18px] border border-black/10 bg-white p-2 shadow-[0_18px_55px_rgba(0,0,0,0.16)]">
               <button
-                onClick={resetCanvas}
+                onClick={() => resetCanvas(true)}
                 className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left text-[14px] text-[#1D1D1F] hover:bg-[#F5F5F7]"
               >
                 <Plus className="h-4 w-4" />
-                新建项目
+                新建空白项目
               </button>
 
               <div className="my-2 h-px bg-black/5" />
               <div className="px-3 pb-1 text-[12px] font-medium text-[#8E8E93]">已保存项目</div>
               <div className="max-h-56 overflow-y-auto">
                 {canvasList.length === 0 ? (
-                  <p className="px-3 py-3 text-[13px] text-[#B3B3B8]">暂无保存项目</p>
+                  <p className="px-3 py-3 text-[13px] text-[#B3B3B8]">暂无保存项目，保存后会出现在这里</p>
                 ) : (
                   canvasList.map((item) => (
                     <button
@@ -1393,75 +1924,79 @@ export default function EditorPage() {
 
           <div
             ref={stageWrapRef}
-            className="absolute inset-0 flex items-center justify-center"
-            onPointerDown={() => {
-              setActiveId(null);
-              setSnapGuides([]);
+            className={`absolute inset-0 overflow-hidden ${
+              workspacePanDrag ? "cursor-grabbing" : "cursor-crosshair"
+            }`}
+            style={{
+              backgroundColor: "#F4F4F5",
+              backgroundImage:
+                "linear-gradient(rgba(29,29,31,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(29,29,31,0.045) 1px, transparent 1px)",
+              backgroundSize: `${32 * stageScale}px ${32 * stageScale}px`,
+              backgroundPosition: `${workspacePan.x}px ${workspacePan.y}px`,
             }}
+            onPointerDownCapture={handleWorkspacePointerDown}
+            onWheel={handleWorkspaceWheel}
           >
             <div
-              className={`relative origin-center overflow-hidden transition-shadow ${
-                doc.elements.length === 0
-                  ? "opacity-0"
-                  : "rounded-[4px] bg-white shadow-[0_18px_70px_rgba(0,0,0,0.10)]"
-              }`}
+              className="absolute left-1/2 top-1/2 origin-center"
               style={{
-                width: CANVAS_SIZE,
-                height: CANVAS_SIZE,
-                transform: `scale(${stageScale})`,
-                background: doc.background,
+                width: WORKSPACE_SIZE,
+                height: WORKSPACE_SIZE,
+                transform: `translate(-50%, -50%) translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${stageScale})`,
               }}
             >
-              {snapGuides.map((guide, index) =>
-                guide.orientation === "vertical" ? (
-                  <div
-                    key={`v-${guide.position}-${index}`}
-                    className="pointer-events-none absolute bottom-0 top-0 bg-[#007AFF]/65"
-                    style={{
-                      left: guide.position - 0.5 / stageScale,
-                      width: 1 / stageScale,
-                    }}
-                  />
-                ) : (
-                  <div
-                    key={`h-${guide.position}-${index}`}
-                    className="pointer-events-none absolute left-0 right-0 bg-[#007AFF]/65"
-                    style={{
-                      top: guide.position - 0.5 / stageScale,
-                      height: 1 / stageScale,
-                    }}
-                  />
-                )
-              )}
+              <div
+                className="absolute rounded-[4px] ring-1 ring-black/10"
+                style={{
+                  left: WORKSPACE_ORIGIN,
+                  top: WORKSPACE_ORIGIN,
+                  width: CANVAS_SIZE,
+                  height: CANVAS_SIZE,
+                  background: isTransparentCanvasBackground(doc.background) ? "transparent" : doc.background,
+                  boxShadow: isTransparentCanvasBackground(doc.background)
+                    ? "inset 0 0 0 1px rgba(255,255,255,0.7)"
+                    : "0 18px 70px rgba(0,0,0,0.12)",
+                }}
+              >
+                {snapGuides.map((guide, index) =>
+                  guide.orientation === "vertical" ? (
+                    <div
+                      key={`v-${guide.position}-${index}`}
+                      className="pointer-events-none absolute bottom-0 top-0 bg-[#007AFF]/65"
+                      style={{
+                        left: guide.position - 0.5 / stageScale,
+                        width: 1 / stageScale,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      key={`h-${guide.position}-${index}`}
+                      className="pointer-events-none absolute left-0 right-0 bg-[#007AFF]/65"
+                      style={{
+                        top: guide.position - 0.5 / stageScale,
+                        height: 1 / stageScale,
+                      }}
+                    />
+                  )
+                )}
+              </div>
 
               {doc.elements.map((element) => (
                 <div
                   key={element.id}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    setActiveId(element.id);
-                    setDrag({
-                      id: element.id,
-                      startX: event.clientX,
-                      startY: event.clientY,
-                      originX: element.x,
-                      originY: element.y,
-                      snapshot: cloneDoc(docRef.current),
-                    });
-                  }}
+                  data-canvas-element
+                  onPointerDown={(event) => beginElementTransform(event, element, "move")}
                   className="absolute cursor-move select-none"
                   style={{
-                    left: element.x,
-                    top: element.y,
+                    left: WORKSPACE_ORIGIN + element.x,
+                    top: WORKSPACE_ORIGIN + element.y,
                     width: element.width,
                     height: element.height,
                     transform: `rotate(${element.rotation}deg)`,
-                    outline: activeId === element.id ? `${2 / stageScale}px solid #007AFF` : "none",
-                    outlineOffset: 4 / stageScale,
                   }}
                 >
                   {element.type === "image" ? (
-                    <img src={element.src} alt="" draggable={false} className="h-full w-full object-cover" />
+                    <img src={element.src} alt="" draggable={false} className="h-full w-full object-fill" />
                   ) : (
                     <div
                       className="h-full w-full whitespace-pre-wrap leading-tight"
@@ -1476,6 +2011,97 @@ export default function EditorPage() {
                   )}
                 </div>
               ))}
+
+              {selectedElements.map((element) => (
+                <div
+                  key={`selected-${element.id}`}
+                  className="pointer-events-none absolute select-none"
+                  style={{
+                    left: WORKSPACE_ORIGIN + element.x,
+                    top: WORKSPACE_ORIGIN + element.y,
+                    width: element.width,
+                    height: element.height,
+                    transform: `rotate(${element.rotation}deg)`,
+                    outline: `${2 / stageScale}px solid #007AFF`,
+                    outlineOffset: 4 / stageScale,
+                  }}
+                />
+              ))}
+
+              {selectedBounds && selectedElements.length > 1 && (
+                <div
+                  className="pointer-events-none absolute border border-dashed border-[#007AFF]"
+                  style={{
+                    left: WORKSPACE_ORIGIN + selectedBounds.x,
+                    top: WORKSPACE_ORIGIN + selectedBounds.y,
+                    width: selectedBounds.width,
+                    height: selectedBounds.height,
+                  }}
+                />
+              )}
+
+              {activeElement && selectedElements.length <= 1 && (
+                <div
+                  data-canvas-element
+                  className="pointer-events-none absolute select-none"
+                  style={{
+                    left: WORKSPACE_ORIGIN + activeElement.x,
+                    top: WORKSPACE_ORIGIN + activeElement.y,
+                    width: activeElement.width,
+                    height: activeElement.height,
+                    transform: `rotate(${activeElement.rotation}deg)`,
+                    outline: `${2 / stageScale}px solid #007AFF`,
+                    outlineOffset: 4 / stageScale,
+                  }}
+                >
+                  {resizeHandles.map((item) => (
+                    <button
+                      key={item.handle}
+                      type="button"
+                      aria-label={`调整${item.handle}`}
+                      onPointerDown={(event) => beginElementTransform(event, activeElement, "resize", item.handle)}
+                      className={`pointer-events-auto absolute z-10 rounded-full border-2 border-white bg-[#007AFF] shadow-[0_2px_8px_rgba(0,0,0,0.22)] ${item.className}`}
+                      style={{
+                        width: 14 / stageScale,
+                        height: 14 / stageScale,
+                        cursor: item.cursor,
+                      }}
+                    />
+                  ))}
+                  <div
+                    className="pointer-events-none absolute left-1/2 bg-[#007AFF]"
+                    style={{
+                      top: -36 / stageScale,
+                      width: 1 / stageScale,
+                      height: 28 / stageScale,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label="旋转图层"
+                    onPointerDown={(event) => beginElementTransform(event, activeElement, "rotate")}
+                    className="pointer-events-auto absolute left-1/2 z-10 flex -translate-x-1/2 items-center justify-center rounded-full border-2 border-white bg-[#007AFF] shadow-[0_2px_8px_rgba(0,0,0,0.22)]"
+                    style={{
+                      top: -48 / stageScale,
+                      width: 18 / stageScale,
+                      height: 18 / stageScale,
+                      cursor: "grab",
+                    }}
+                  />
+                </div>
+              )}
+
+              {marquee && (
+                <div
+                  className="pointer-events-none absolute border border-[#007AFF] bg-[#007AFF]/10"
+                  style={{
+                    left: WORKSPACE_ORIGIN + normalizeRect(marquee.start, marquee.current).x,
+                    top: WORKSPACE_ORIGIN + normalizeRect(marquee.start, marquee.current).y,
+                    width: normalizeRect(marquee.start, marquee.current).width,
+                    height: normalizeRect(marquee.start, marquee.current).height,
+                  }}
+                />
+              )}
             </div>
           </div>
 
@@ -1492,6 +2118,33 @@ export default function EditorPage() {
             <ToolbarButton icon={<Type className="h-4 w-4" />} label="文字" onClick={() => addText()} />
             <ToolbarButton icon={<Save className="h-4 w-4" />} label={saving ? "保存中" : "保存"} onClick={() => void handleSave()} />
             <ToolbarButton icon={<Download className="h-4 w-4" />} label="导出" onClick={() => void handleExport()} />
+          </div>
+
+          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-1 rounded-[14px] border border-black/10 bg-white/95 p-1.5 text-[12px] font-medium text-[#3A3A3C] shadow-[0_10px_35px_rgba(0,0,0,0.12)] backdrop-blur">
+            <button
+              type="button"
+              onClick={() => zoomWorkspace(stageScale / 1.15)}
+              className="h-8 min-w-8 rounded-[10px] px-2 hover:bg-[#F5F5F7]"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStageScale(0.59);
+                setWorkspacePan({ x: 0, y: 0 });
+              }}
+              className="h-8 rounded-[10px] px-3 hover:bg-[#F5F5F7]"
+            >
+              {Math.round(stageScale * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => zoomWorkspace(stageScale * 1.15)}
+              className="h-8 min-w-8 rounded-[10px] px-2 hover:bg-[#F5F5F7]"
+            >
+              +
+            </button>
           </div>
 
           {settingsOpen && (
@@ -1602,6 +2255,7 @@ export default function EditorPage() {
             ref={fileInputRef}
             type="file"
             accept="image/png,image/jpeg,image/webp"
+            multiple
             onChange={handleImageUpload}
             className="hidden"
           />
@@ -1671,7 +2325,7 @@ export default function EditorPage() {
                       return (
                         <button
                           key={element.id}
-                          onClick={() => setActiveId(element.id)}
+                          onClick={() => selectElements([element.id], element.id)}
                           className={`flex w-full items-center gap-3 rounded-[10px] px-2 py-2 text-left transition ${
                             activeId === element.id ? "bg-white shadow-sm" : "hover:bg-white"
                           }`}
@@ -1755,7 +2409,19 @@ export default function EditorPage() {
           </div>
 
           <div className="absolute bottom-0 left-0 right-0 border-t border-black/5 bg-white p-4">
-            {activeElement && (
+            {selectedElements.length > 1 && (
+              <MultiSelectionInspector
+                count={selectedElements.length}
+                removeSelected={removeSelectedElements}
+                duplicateSelected={duplicateSelectedElements}
+                centerHorizontal={() => centerActiveElement("x")}
+                centerVertical={() => centerActiveElement("y")}
+                alignSelected={alignSelectedElements}
+                groupSelected={() => setMessage("组合功能已预留，后续可扩展为真实分组")}
+              />
+            )}
+
+            {activeElement && selectedElements.length <= 1 && (
               <ActiveInspector
                 element={activeElement}
                 updateElement={updateElement}
@@ -1768,8 +2434,35 @@ export default function EditorPage() {
               />
             )}
 
-            {message && <p className="mb-2 text-[12px] text-[#8E8E93]">{message}</p>}
             <div className="rounded-[18px] border border-black/10 bg-white p-2 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+              {selectedReferenceImages.length > 0 && (
+                <div className="mb-2 rounded-[14px] bg-[#F5F8FF] p-2 text-left">
+                  <div className="mb-2 flex items-center justify-between text-[12px] font-medium text-[#3A3A3C]">
+                    <span>{`已加入 ${selectedReferenceImages.length} 张独立参考图`}</span>
+                    <span className="text-[#8E8E93]">reference_1...</span>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {selectedReferenceImages.map((item) => (
+                      <div
+                        key={item.layerId}
+                        className="group relative w-[78px] shrink-0 rounded-[10px] border border-[#D9E7FF] bg-white p-1"
+                      >
+                        <img src={item.imageUrl} alt={item.displayLabel} className="h-[58px] w-full rounded-[7px] object-cover" />
+                        <div className="mt-1 truncate text-[11px] font-medium text-[#1D1D1F]">{item.displayLabel}</div>
+                        <div className="truncate text-[10px] text-[#8E8E93]">{item.roleLabel}</div>
+                        <button
+                          type="button"
+                          onClick={() => toggleElementSelection(item.layerId)}
+                          className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[13px] leading-none text-white group-hover:flex"
+                          aria-label={`移除${item.displayLabel}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 ref={promptInputRef}
                 value={prompt}
@@ -1848,6 +2541,52 @@ function ToolbarButton({
   );
 }
 
+function MultiSelectionInspector({
+  count,
+  removeSelected,
+  duplicateSelected,
+  centerHorizontal,
+  centerVertical,
+  alignSelected,
+  groupSelected,
+}: {
+  count: number;
+  removeSelected: () => void;
+  duplicateSelected: () => void;
+  centerHorizontal: () => void;
+  centerVertical: () => void;
+  alignSelected: (align: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => void;
+  groupSelected: () => void;
+}) {
+  return (
+    <div className="mb-3 rounded-[14px] border border-[#D9E7FF] bg-[#F8FBFF] p-3 text-left">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-[#1D1D1F]">已选中 {count} 个元素</span>
+        <button onClick={removeSelected} className="rounded-full p-1 text-[#8E8E93] hover:bg-white">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mb-2 grid grid-cols-3 gap-2">
+        <InspectorActionButton label="左对齐" onClick={() => alignSelected("left")} />
+        <InspectorActionButton label="水平居中" onClick={() => alignSelected("centerX")} />
+        <InspectorActionButton label="右对齐" onClick={() => alignSelected("right")} />
+        <InspectorActionButton label="顶对齐" onClick={() => alignSelected("top")} />
+        <InspectorActionButton label="垂直居中" onClick={() => alignSelected("centerY")} />
+        <InspectorActionButton label="底对齐" onClick={() => alignSelected("bottom")} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <InspectorActionButton label="居中到画板" onClick={centerHorizontal} />
+        <InspectorActionButton label="垂直到画板" onClick={centerVertical} />
+        <InspectorActionButton label="复制所选" onClick={duplicateSelected} />
+        <InspectorActionButton label="组合" onClick={groupSelected} />
+        <InspectorActionButton danger label="删除所选" onClick={removeSelected} />
+      </div>
+    </div>
+  );
+}
+
 function ActiveInspector({
   element,
   updateElement,
@@ -1867,6 +2606,22 @@ function ActiveInspector({
   moveForward: () => void;
   moveBackward: () => void;
 }) {
+  const aspectLocked = getImageAspectLocked(element);
+  const updateSize = (dimension: "width" | "height", value: number) => {
+    const nextValue = Math.max(MIN_ELEMENT_SIZE, value);
+    if (element.type === "image" && aspectLocked && element.width > 0 && element.height > 0) {
+      const aspect = element.width / element.height;
+      updateElement(
+        element.id,
+        dimension === "width"
+          ? { width: nextValue, height: Math.max(MIN_ELEMENT_SIZE, Math.round(nextValue / aspect)) }
+          : { height: nextValue, width: Math.max(MIN_ELEMENT_SIZE, Math.round(nextValue * aspect)) }
+      );
+      return;
+    }
+    updateElement(element.id, { [dimension]: nextValue } as Partial<CanvasElement>);
+  };
+
   return (
     <div className="mb-3 rounded-[14px] border border-black/5 bg-[#FAFAFA] p-3 text-left">
       <div className="mb-3 flex items-center justify-between">
@@ -1878,7 +2633,20 @@ function ActiveInspector({
 
       {element.type === "image" && (
         <div className="mb-3">
-          <label className="mb-1 block text-[11px] text-[#8E8E93]">素材类型</label>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="block text-[11px] text-[#8E8E93]">素材类型</label>
+            <button
+              type="button"
+              onClick={() => updateElement(element.id, { lockAspect: !aspectLocked } as Partial<CanvasElement>)}
+              className={`inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] font-medium ${
+                aspectLocked ? "bg-[#EAF3FF] text-[#007AFF]" : "bg-white text-[#8E8E93]"
+              }`}
+              title={aspectLocked ? "比例锁定" : "自由缩放"}
+            >
+              {aspectLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+              {aspectLocked ? "比例锁定" : "自由缩放"}
+            </button>
+          </div>
           <select
             value={element.role || "other"}
             onChange={(event) => {
@@ -1929,8 +2697,8 @@ function ActiveInspector({
       <div className="mb-3 grid grid-cols-5 gap-2">
         <MiniNumber label="X" value={element.x} onChange={(value) => updateElement(element.id, { x: value })} />
         <MiniNumber label="Y" value={element.y} onChange={(value) => updateElement(element.id, { y: value })} />
-        <MiniNumber label="W" value={element.width} min={40} onChange={(value) => updateElement(element.id, { width: value })} />
-        <MiniNumber label="H" value={element.height} min={40} onChange={(value) => updateElement(element.id, { height: value })} />
+        <MiniNumber label="W" value={element.width} min={40} onChange={(value) => updateSize("width", value)} />
+        <MiniNumber label="H" value={element.height} min={40} onChange={(value) => updateSize("height", value)} />
         <MiniNumber label="R" value={element.rotation} onChange={(value) => updateElement(element.id, { rotation: value })} />
       </div>
 

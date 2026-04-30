@@ -15,8 +15,8 @@ router = APIRouter(prefix="/api/portrait", tags=["portrait"])
 
 ROLE_PROMPTS = {
     "person": "人物主体：保持人物脸部身份、五官特征、身形气质，不要随意换脸。",
-    "top": "上衣参考：提取版型、颜色、材质和图案，用在人物穿搭上。",
-    "pants": "裤子/下装参考：提取版型、颜色、材质和搭配方式。",
+    "top": "上衣参考：提取颜色、版型、材质和穿着效果，用在人物穿搭上。",
+    "pants": "裤子/下装参考：提取裤型、颜色、材质和穿着效果。",
     "shoes": "鞋子参考：提取鞋型、颜色、材质和穿着效果。",
     "accessory": "饰品参考：作为配饰融入造型，保持比例自然。",
     "background": "背景参考：作为写真场景或空间氛围使用。",
@@ -35,6 +35,17 @@ def _build_portrait_prompt(user_prompt: str, references: list[PortraitReference]
         "",
         "参考素材说明：",
     ]
+    for index, item in enumerate(references, start=1):
+        role_note = ROLE_PROMPTS.get(item.role, ROLE_PROMPTS["other"])
+        label_parts = []
+        if item.label:
+            label_parts.append(item.label)
+        if item.layer_id:
+            label_parts.append(f"layer_id={item.layer_id}")
+        label = f" ({' / '.join(label_parts)})" if label_parts else ""
+        lines.append(f"{index}. reference_{index}: {role_note}{label}")
+    return "\n".join(lines)
+
     for index, item in enumerate(references, start=1):
         role_note = ROLE_PROMPTS.get(item.role, ROLE_PROMPTS["other"])
         label = f"（{item.label}）" if item.label else ""
@@ -74,7 +85,7 @@ async def compose_portrait(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-    if not any(item.role == "person" for item in req.references):
+    if False and not any(item.role == "person" for item in req.references):
         raise HTTPException(status_code=400, detail="请先上传并标记人物主体素材")
 
     composed_prompt = _build_portrait_prompt(req.prompt, req.references)

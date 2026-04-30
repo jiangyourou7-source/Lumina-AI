@@ -4,6 +4,8 @@ import { getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/session-cook
 
 const BACKEND_API_BASE_URL =
   process.env.BACKEND_API_BASE_URL || "http://localhost:8000";
+const LOCAL_BACKEND_FALLBACK_URL =
+  process.env.LOCAL_BACKEND_FALLBACK_URL || "http://127.0.0.1:8001";
 
 export function getRequestSessionToken(request: NextRequest) {
   return request.cookies.get(SESSION_COOKIE_NAME)?.value || null;
@@ -37,15 +39,27 @@ export async function backendJson(
     headers.set("Authorization", `Bearer ${options.sessionToken}`);
   }
 
-  const response = await fetch(`${BACKEND_API_BASE_URL}${path}`, {
+  const requestInit: RequestInit = {
     method: options.method || "GET",
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  };
+
+  let response = await fetch(`${BACKEND_API_BASE_URL}${path}`, requestInit);
+
+  if (shouldTryLocalFallback(response)) {
+    response = await fetch(`${LOCAL_BACKEND_FALLBACK_URL}${path}`, requestInit);
+  }
 
   const data = await readJsonResponse(response);
   return { response, data };
+}
+
+function shouldTryLocalFallback(response: Response) {
+  if (response.status !== 404) return false;
+  if (BACKEND_API_BASE_URL === LOCAL_BACKEND_FALLBACK_URL) return false;
+  return /^https?:\/\/(127\.0\.0\.1|localhost):8000\/?$/.test(BACKEND_API_BASE_URL);
 }
 
 export function unauthorizedResponse() {

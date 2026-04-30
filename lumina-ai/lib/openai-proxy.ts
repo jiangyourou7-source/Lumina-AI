@@ -121,6 +121,7 @@ export interface PortraitReference {
   role: PortraitReferenceRole;
   imageUrl: string;
   label?: string;
+  layerId?: string;
 }
 
 interface ComposePortraitParams {
@@ -152,6 +153,7 @@ export async function composePortrait(params: ComposePortraitParams): Promise<Ed
           role: item.role,
           image_url: item.imageUrl,
           label: item.label,
+          layer_id: item.layerId,
         })),
         size,
         resolution,

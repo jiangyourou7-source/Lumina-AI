@@ -359,7 +359,7 @@ export default function StudioPage() {
   };
 
   return authReady ? (
-    <div className="relative h-[calc(100vh-64px)] flex bg-[#F8FAFC]">
+    <div className="relative flex h-[calc(100vh-64px)] overflow-hidden bg-[#F8FAFC]">
       {mobilePanelOpen && (
         <button
           type="button"
@@ -386,10 +386,14 @@ export default function StudioPage() {
       </button>
       <div
         className={`${
-          mobilePanelOpen ? "fixed inset-x-0 bottom-0 z-50 max-h-[88vh] rounded-t-[24px] shadow-[0_-24px_80px_rgba(15,23,42,0.20)]" : "hidden"
+          mobilePanelOpen
+            ? "fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] rounded-t-[24px] shadow-[0_-24px_80px_rgba(15,23,42,0.20)]"
+            : "hidden"
         } ${
-          panelCollapsed ? "lg:hidden" : "lg:static lg:z-auto lg:flex lg:h-full lg:max-h-none lg:w-[440px] lg:min-w-[440px] lg:rounded-none lg:shadow-none"
-        } relative flex flex-col overflow-hidden border-r border-[#E2E8F0] bg-white`}
+          panelCollapsed
+            ? "lg:hidden"
+            : "lg:static lg:z-auto lg:flex lg:h-full lg:max-h-none lg:w-[440px] lg:min-w-[440px] lg:rounded-none lg:shadow-none"
+        } relative flex-col overflow-hidden border-r border-[#E2E8F0] bg-white`}
       >
         <div className="flex h-14 items-center justify-between border-b border-[#E2E8F0] px-5 lg:hidden">
           <span className="text-[15px] font-semibold text-[#0F172A]">生成设置</span>
@@ -572,8 +576,8 @@ export default function StudioPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-full bg-[#F8FAFC]">
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden p-8">
+      <div className="flex h-full min-w-0 flex-1 flex-col bg-[#F8FAFC]">
+        <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-8">
           {state === "generating" && <GeneratingLightBackground />}
 
           {state === "idle" && (
